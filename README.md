@@ -26,3 +26,8 @@ Then install the skills you need:
 | --------------------- | ---------------------------------------------------------------------- |
 | `commit-message`      | Generate a conventional commit message by analyzing staged git changes |
 | `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat |
+
+## References
+
+- [Building an AI-Driven Development Workflow with Claude Code + GitHub Copilot Review](https://blog.wu-boy.com/2026/03/ai-driven-development-with-claude-code-and-github-copilot-review-en/)
+- [What Is Agent Skill? How It Changes the Software Industry](https://blog.wu-boy.com/2026/03/what-is-agent-skill-and-impact-on-software-industry-en/)
