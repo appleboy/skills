@@ -42,20 +42,33 @@ Extract and store:
 
 ### 2. Check Copilot review status
 
-Confirm that Copilot has finished its latest review before acting on comments.
+Before acting on comments, confirm two things: (a) Copilot has finished reviewing, and (b) the review covers the latest push. Without the timing check, a common race condition occurs: after fixing and re-triggering, the next cycle sees the old review (state = COMMENTED), finds all old threads resolved, and falsely concludes "no unresolved comments" — stopping the loop before Copilot's new review arrives.
+
+First, get the latest Copilot review state and timestamp:
 
 ```bash
 gh pr view ${PR_NUM} --repo ${OWNER}/${REPO} --json reviews -q '
   [.reviews[]
     | select(.author.login | test("copilot"; "i"))]
   | sort_by(.submittedAt)
-  | .[-1].state // "PENDING"
+  | .[-1] | {state, submittedAt}
 '
 ```
 
-- `"PENDING"` — Copilot is still reviewing. **Report "Copilot review in progress, waiting..." and stop.** The next `/loop` cycle will check again.
-- `"APPROVED"` — No suggestions. Report "Copilot review passed, ready for human review" and **stop the loop**.
-- `"COMMENTED"` or `"CHANGES_REQUESTED"` — Proceed to Step 3.
+Then get the latest commit timestamp on the PR branch:
+
+```bash
+gh pr view ${PR_NUM} --repo ${OWNER}/${REPO} --json commits -q '
+  .commits[-1].committedDate
+'
+```
+
+Compare the two timestamps:
+
+- If the **latest review is older than the latest commit**, Copilot has not reviewed the new changes yet. **Report "Waiting for Copilot to review latest push..." and stop.** The next `/loop` cycle will check again.
+- If review state is `"PENDING"` — Copilot is still reviewing. **Report "Copilot review in progress, waiting..." and stop.**
+- If review state is `"APPROVED"` — No suggestions. Report "Copilot review passed, ready for human review" and **stop the loop**.
+- If review state is `"COMMENTED"` or `"CHANGES_REQUESTED"` — Proceed to Step 3.
 
 ### 3. Fetch unresolved Copilot review comments
 
