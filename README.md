@@ -1,6 +1,6 @@
 # Skills
 
-Agent Skills Collection for Claude Code.
+Agent Skills Collection.
 
 ## Installation
 
