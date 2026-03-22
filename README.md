@@ -1,5 +1,8 @@
 # Skills
 
+[![Goreleaser](https://github.com/appleboy/skills/actions/workflows/goreleaser.yml/badge.svg)](https://github.com/appleboy/skills/actions/workflows/goreleaser.yml)
+[![Trivy Security Scan](https://github.com/appleboy/skills/actions/workflows/security.yml/badge.svg)](https://github.com/appleboy/skills/actions/workflows/security.yml)
+
 Agent Skills Collection.
 
 ## Installation
