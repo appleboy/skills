@@ -10,10 +10,11 @@ Add this marketplace in Claude Code:
 /plugin marketplace add appleboy/skills
 ```
 
-Then install the plugin:
+Then install the skills you need:
 
 ```
-/plugin install appleboy-skills
+/plugin install commit-message
+/plugin install copilot-review-loop
 ```
 
 ## Available Skills

@@ -9,12 +9,20 @@
   },
   "plugins": [
     {
-      "name": "appleboy-skills",
-      "description": "Collection of development skills including commit message generation and Copilot review automation",
+      "name": "commit-message",
+      "description": "Generate a conventional commit message by analyzing staged git changes",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/commit-message",
+        "./skills/commit-message"
+      ]
+    },
+    {
+      "name": "copilot-review-loop",
+      "description": "Automates the iterative PR review loop with GitHub Copilot Review using /loop and gh CLI",
+      "source": "./",
+      "strict": false,
+      "skills": [
         "./skills/copilot-review-loop"
       ]
     }
