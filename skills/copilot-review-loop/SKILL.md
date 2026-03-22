@@ -113,7 +113,7 @@ If tests fail:
 
 ### 6. Commit and push
 
-Use the **commit-message** skill (`/commit`) to generate a proper conventional commit message for the fixes. This ensures commit messages follow the repo's conventions and include a meaningful summary.
+Use the **commit-message** skill (`/commit-message`) to generate a proper conventional commit message for the fixes. This ensures commit messages follow the repo's conventions and include a meaningful summary.
 
 After committing, push the changes:
 
