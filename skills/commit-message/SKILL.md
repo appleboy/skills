@@ -87,4 +87,4 @@ Format the commit message as:
 <summary>
 ```
 
-Show the formatted message to the user and ask for confirmation before running `git commit`.
+Run `git commit` directly without asking for confirmation.
