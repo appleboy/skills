@@ -10,14 +10,15 @@ Add this marketplace in Claude Code:
 /plugin marketplace add appleboy/skills
 ```
 
-Then install a plugin:
+Then install the plugin:
 
 ```
-/plugin install copilot-review-loop@appleboy-skills
+/plugin install appleboy-skills
 ```
 
-## Available Plugins
+## Available Skills
 
-| Plugin | Description |
-|--------|-------------|
+| Skill | Description |
+|-------|-------------|
+| `commit-message` | Generate a conventional commit message by analyzing staged git changes |
 | `copilot-review-loop` | Automates the iterative PR review loop with GitHub Copilot Review |
