@@ -14,7 +14,7 @@ Then install the skills you need:
 
 ```bash
 /plugin install commit-message
-/plugin install copilot-review-loop
+/plugin install copilot-review
 ```
 
 ## Available Skills
@@ -22,4 +22,4 @@ Then install the skills you need:
 | Skill                 | Description                                                            |
 | --------------------- | ---------------------------------------------------------------------- |
 | `commit-message`      | Generate a conventional commit message by analyzing staged git changes |
-| `copilot-review-loop` | Automates the iterative PR review loop with GitHub Copilot Review      |
+| `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat |

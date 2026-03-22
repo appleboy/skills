@@ -1,11 +1,17 @@
 ---
-name: copilot-review-loop
-description: "Automates the iterative PR review loop with GitHub Copilot Review using /loop and gh CLI. Use this skill whenever the user wants to: request a Copilot code review on a PR, run a fix-push-re-review cycle, or automate PR review iteration. Trigger on phrases like 'copilot review', 'review loop', 'fix PR comments', '/loop', 'iterate on PR', 're-review', or when the user mentions 'gh pr' with 'copilot'. This skill is essential for any workflow that involves GitHub Copilot as an automated code reviewer."
+name: copilot-review
+description: "Runs a single Copilot review check-fix cycle on a PR using gh CLI. Use this skill whenever the user wants to: check and fix Copilot review comments, request a Copilot code review on a PR, or iterate on PR feedback. Trigger on phrases like 'copilot review', 'fix PR comments', 'iterate on PR', 're-review', or when the user mentions 'gh pr' with 'copilot'. Combine with /loop for automated repeated cycles, e.g. '/loop 2m /copilot-review'."
 ---
 
-# Copilot Review Loop
+# Copilot Review
 
-Use Claude Code's `/loop` with `gh` CLI to automate the **Copilot Review → Fix → Re-review** cycle.
+A single-pass check-fix cycle for Copilot review comments. Designed to be called repeatedly via `/loop`:
+
+```
+/loop 2m /copilot-review
+```
+
+Each invocation runs one iteration: check for unresolved comments → fix → push → resolve → re-trigger review. When no comments remain, stop the loop.
 
 ## Prerequisites
 
@@ -36,7 +42,7 @@ Extract and store:
 
 ### 2. Check Copilot review status
 
-Before fetching comments, confirm that Copilot has finished its latest review. A review may still be in progress after a re-trigger.
+Confirm that Copilot has finished its latest review before acting on comments.
 
 ```bash
 gh pr view ${PR_NUM} --repo ${OWNER}/${REPO} --json reviews -q '
@@ -47,13 +53,13 @@ gh pr view ${PR_NUM} --repo ${OWNER}/${REPO} --json reviews -q '
 '
 ```
 
-- If the state is `"PENDING"`, Copilot is still reviewing — **wait for the next loop iteration**.
-- If the state is `"APPROVED"`, Copilot has no suggestions — report "Copilot review passed, ready for human review" and **stop the loop**.
-- If the state is `"COMMENTED"` or `"CHANGES_REQUESTED"`, proceed to Step 3.
+- `"PENDING"` — Copilot is still reviewing. **Report "Copilot review in progress, waiting..." and stop.** The next `/loop` cycle will check again.
+- `"APPROVED"` — No suggestions. Report "Copilot review passed, ready for human review" and **stop the loop**.
+- `"COMMENTED"` or `"CHANGES_REQUESTED"` — Proceed to Step 3.
 
 ### 3. Fetch unresolved Copilot review comments
 
-Use the GraphQL API to get only unresolved threads authored by Copilot. The REST API (`gh pr view --json comments`) does not include inline review comments.
+Use the GraphQL API to get only unresolved threads authored by Copilot. The REST API does not include inline review comments.
 
 ```bash
 gh api graphql -f query='
@@ -113,7 +119,7 @@ If tests fail:
 
 ### 6. Commit and push
 
-Use the **commit-message** skill (`/commit-message`) to generate a proper conventional commit message for the fixes. This ensures commit messages follow the repo's conventions and include a meaningful summary.
+Use the **commit-message** skill (`/commit-message`) to generate a proper conventional commit message for the fixes.
 
 After committing, push the changes:
 
@@ -141,26 +147,21 @@ gh api graphql -f query='
 gh pr edit ${PR_NUM} --repo ${OWNER}/${REPO} --add-reviewer "@copilot"
 ```
 
-The loop will check again on the next iteration for new comments from the re-review.
+The next `/loop` cycle will check for new comments from this re-review.
 
 ---
 
 ## Usage
 
-Run directly in Claude Code:
-
 ```
-/loop 5m Check PR #<PR_NUM> (<OWNER/REPO>) for Copilot review comments.
-If there are new unresolved review comments:
-1. Read the comment content
-2. Fix the code accordingly
-3. Run tests to confirm they pass
-4. Commit & push
-5. Re-trigger review with: gh pr edit <PR_NUM> --repo <OWNER/REPO> --add-reviewer "@copilot"
-If there are no new comments, report "Review passed, ready for human review" and stop.
+/loop 2m /copilot-review
 ```
 
-If the user doesn't specify a PR number, auto-detect it from the current branch (see Step 1).
+Or with a specific PR:
+
+```
+/loop 2m Check Copilot review on PR #123 (owner/repo) using /copilot-review
+```
 
 ---
 

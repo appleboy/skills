@@ -18,12 +18,12 @@
       ]
     },
     {
-      "name": "copilot-review-loop",
-      "description": "Automates the iterative PR review loop with GitHub Copilot Review using /loop and gh CLI",
+      "name": "copilot-review",
+      "description": "Single-pass Copilot review check-fix cycle, use with /loop to repeat",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/copilot-review-loop"
+        "./skills/copilot-review"
       ]
     }
   ]
