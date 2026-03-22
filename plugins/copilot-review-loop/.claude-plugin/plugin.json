@@ -1,5 +1,0 @@
-{
-  "name": "copilot-review-loop",
-  "description": "Automates the iterative PR review loop with GitHub Copilot Review using /loop and gh CLI.",
-  "version": "1.0.0"
-}
