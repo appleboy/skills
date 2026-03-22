@@ -44,41 +44,26 @@ Extract and store:
 
 Before acting on comments, confirm two things: (a) Copilot has finished reviewing, and (b) the review covers the latest push. Without the timing check, a common race condition occurs: after fixing and re-triggering, the next cycle sees the old review (state = COMMENTED), finds all old threads resolved, and falsely concludes "no unresolved comments" — stopping the loop before Copilot's new review arrives.
 
-First, get the latest Copilot review state and timestamp:
+**IMPORTANT:** Use GraphQL (not `gh pr view --json reviews`) to fetch reviews. The REST API returns `author.login` as `"copilot"`, but GraphQL returns `"copilot-pull-request-reviewer"`. Using GraphQL consistently avoids mismatches.
 
-```bash
-gh pr view ${PR_NUM} --repo ${OWNER}/${REPO} --json reviews -q '
-  [.reviews[]
-    | select(.author.login | test("copilot"; "i"))]
-  | sort_by(.submittedAt)
-  | .[-1] | {state, submittedAt}
-'
-```
-
-Then get the latest commit timestamp on the PR branch:
-
-```bash
-gh pr view ${PR_NUM} --repo ${OWNER}/${REPO} --json commits -q '
-  .commits[-1].committedDate
-'
-```
-
-Compare the two timestamps:
-
-- If the **latest review is older than the latest commit**, Copilot has not reviewed the new changes yet. **Report "Waiting for Copilot to review latest push..." and stop.** The next `/loop` cycle will check again.
-- If review state is `"PENDING"` — Copilot is still reviewing. **Report "Copilot review in progress, waiting..." and stop.**
-- If review state is `"APPROVED"` — No suggestions. Report "Copilot review passed, ready for human review" and **stop the loop**.
-- If review state is `"COMMENTED"` or `"CHANGES_REQUESTED"` — Proceed to Step 3.
-
-### 3. Fetch unresolved Copilot review comments
-
-Use the GraphQL API to get only unresolved threads authored by Copilot. The REST API does not include inline review comments.
+Use a single GraphQL query to get the latest Copilot review (with body), the latest commit timestamp, and all unresolved threads:
 
 ```bash
 gh api graphql -f query='
   query($owner: String!, $repo: String!, $pr: Int!) {
     repository(owner: $owner, name: $repo) {
       pullRequest(number: $pr) {
+        reviews(last: 20) {
+          nodes {
+            author { login }
+            state
+            submittedAt
+            body
+          }
+        }
+        commits(last: 1) {
+          nodes { commit { committedDate } }
+        }
         reviewThreads(first: 100) {
           nodes {
             id
@@ -98,18 +83,42 @@ gh api graphql -f query='
     }
   }
 ' -F owner="${OWNER}" -F repo="${REPO}" -F pr="${PR_NUM}" \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]
-    | select(.isResolved == false)
-    | select(.comments.nodes[0].author.login | test("copilot"; "i"))
-    | {
-        threadId: .id,
-        path: .comments.nodes[0].path,
-        line: (.comments.nodes[0].line // .comments.nodes[0].originalLine),
-        comment: .comments.nodes[0].body
-      }'
+  --jq '{
+    review: ([.data.repository.pullRequest.reviews.nodes[]
+      | select(.author.login == "copilot-pull-request-reviewer")]
+      | sort_by(.submittedAt) | .[-1]
+      | {state, submittedAt, body}),
+    latestCommit: .data.repository.pullRequest.commits.nodes[-1].commit.committedDate,
+    unresolvedThreads: [.data.repository.pullRequest.reviewThreads.nodes[]
+      | select(.isResolved == false)
+      | select(.comments.nodes[0].author.login == "copilot-pull-request-reviewer")
+      | {
+          threadId: .id,
+          path: .comments.nodes[0].path,
+          line: (.comments.nodes[0].line // .comments.nodes[0].originalLine),
+          comment: .comments.nodes[0].body
+        }]
+  }'
 ```
 
-If there are **no unresolved comments**, report "All Copilot comments resolved — ready for human review" and **stop the loop**.
+Apply the following decision logic in order:
+
+1. **No Copilot review exists yet** — report "No Copilot review found, triggering one..." → run `gh pr edit ... --add-reviewer "@copilot"` → **stop, wait for next cycle**.
+2. **`review.submittedAt` < `latestCommit`** — Copilot has not reviewed the latest push. **Report "Waiting for Copilot to review latest push..." and stop.**
+3. **Parse `review.body`** — Copilot's review summary always contains a line like:
+   - `"generated no new comments"` → Copilot reviewed and found nothing. Report "Copilot review passed (no new comments) — ready for human review" and **stop the loop**.
+   - `"generated N comments"` (N > 0) → Copilot found issues. **Proceed to Step 3.**
+   - If the body doesn't match either pattern (e.g., first overview-only review), **proceed to Step 3** to check for unresolved threads anyway.
+
+### 3. Process unresolved Copilot review comments
+
+The `unresolvedThreads` array from the Step 2 query already contains all unresolved threads authored by Copilot.
+
+If `unresolvedThreads` is **empty** and `review.body` contains `"generated no new comments"`, report "All Copilot comments resolved — ready for human review" and **stop the loop**.
+
+If `unresolvedThreads` is **empty** but `review.body` contains `"generated N comments"` (N > 0), this means all threads from that review were already resolved. **Stop the loop** — ready for human review.
+
+If `unresolvedThreads` is **not empty**, proceed to fix each comment.
 
 ### 4. Fix the code
 
@@ -202,5 +211,7 @@ gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUM}/comments" \
 
 - **Cap at 10 iterations.** Beyond that usually signals an architectural disagreement — stop and ask the user to review manually.
 - **Copilot reviews are "Comment" type** — they never Approve or Block merge.
+- **Author login mismatch:** REST API returns `author.login` as `"Copilot"`, but GraphQL returns `"copilot-pull-request-reviewer"`. Always use GraphQL with exact match `== "copilot-pull-request-reviewer"` for reliable detection.
+- **Review body is the source of truth** for completion: `"generated no new comments"` means Copilot is done with no issues. `"generated N comments"` means there are comments to address. Do NOT rely solely on unresolved thread count — threads from previous reviews may all be resolved while a new review hasn't arrived yet.
 - **Free for open-source repos.** No Copilot subscription required.
 - **Add `.github/copilot-instructions.md`** to guide Copilot's review behavior (coding style, conventions, etc.).
