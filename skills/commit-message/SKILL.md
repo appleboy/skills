@@ -11,7 +11,7 @@ Generate a conventional commit message from staged git changes following a struc
 
 ### 1. Stage changes and get the diff
 
-If there are modified files from the current session that haven't been staged yet, run `git add` on those files first to include them in the staged changes.
+Only stage files that were modified as part of the current session's work. Do not blindly run `git add -A` or `git add .` — pick specific files relevant to the task. If unsure which files to stage, show the user `git status` and let them decide.
 
 Then get both an overview and the full diff:
 
@@ -26,7 +26,17 @@ If the diff is very large (e.g., more than 2000 lines), focus on the `--stat` ou
 
 If the staged changes span many unrelated modules or more than 10 files across different concerns, suggest splitting into multiple focused commits before proceeding.
 
-### 2. Analyze the diff
+### 2. Check existing commit style
+
+Run a quick scan of recent commits to match the repo's conventions:
+
+```bash
+git log --oneline -20
+```
+
+If the repo already follows a consistent style (e.g., specific scope naming, prefix preferences, or language), adapt the generated message to match. The conventions in this skill are defaults — defer to the repo's existing patterns when they differ.
+
+### 3. Analyze the diff
 
 Produce a bullet-point summary of the changes. Follow these rules:
 
@@ -47,7 +57,7 @@ Example summary comments for reference (do not copy verbatim):
 - Implement an OpenAI API endpoint for completions
 ```
 
-### 3. Generate the commit title
+### 4. Generate the commit title
 
 From the summary, write a single-line commit title:
 
@@ -58,7 +68,7 @@ From the summary, write a single-line commit title:
 - Lowercase the first character.
 - Remove any trailing period.
 
-### 4. Determine the prefix and scope
+### 5. Determine the prefix and scope
 
 **Prefix** — choose exactly one label based on the summary:
 
@@ -84,7 +94,7 @@ From the summary, write a single-line commit title:
 - Keep the scope short — a single lowercase word.
 - Scope is **recommended but optional** — if no clear scope can be determined (e.g., changes touch many unrelated areas), omit it and use the format `<prefix>: <title>` instead.
 
-### 5. Create the commit
+### 6. Create the commit
 
 Format the commit message as:
 
@@ -112,4 +122,25 @@ If there is a breaking change, include the footer:
 BREAKING CHANGE: <description of what broke and migration path>
 ```
 
-Run `git commit` with the formatted message directly — do not ask for confirmation.
+Use a HEREDOC to pass the multi-line message to `git commit`:
+
+```bash
+git commit -m "$(cat <<'EOF'
+<prefix>(<scope>): <title>
+
+<summary>
+EOF
+)"
+```
+
+Run `git commit` directly — do not ask for confirmation.
+
+### 7. Handle additional user requests
+
+If the user's request includes extra actions beyond committing (e.g., "commit and push", "commit 然後推上去", "commit and create PR"), execute those after the commit succeeds. Common patterns:
+
+- **push**: run `git push` after commit
+- **push and PR**: push, then create a pull request
+- **tag**: create a git tag after commit
+
+Only perform actions the user explicitly requested.
