@@ -1,6 +1,6 @@
 ---
 name: commit-message
-description: "Generate a conventional commit message by analyzing staged git changes. Use when the user wants to create, write, or generate a git commit message from their current staged diff."
+description: "Generate a conventional commit message by analyzing staged git changes. Use when the user wants to create, write, or generate a git commit message from their current staged diff. Trigger on phrases like \"commit\", \"commit message\", \"commit msg\", \"寫 commit\", \"提交訊息\", \"generate commit\", or when the user has just finished making code changes and wants to commit them. Also trigger when the user runs /commit."
 ---
 
 # Generate Commit Message
@@ -13,13 +13,18 @@ Generate a conventional commit message from staged git changes following a struc
 
 If there are modified files from the current session that haven't been staged yet, run `git add` on those files first to include them in the staged changes.
 
-Then get the staged diff:
+Then get both an overview and the full diff:
 
 ```bash
+git diff --staged --stat
 git diff --staged
 ```
 
 If the diff is empty after this, inform the user that there are no staged changes and stop.
+
+If the diff is very large (e.g., more than 2000 lines), focus on the `--stat` output and the most important hunks. For files where changes are too extensive, note that those diffs were omitted and base the summary on the stat overview and available context.
+
+If the staged changes span many unrelated modules or more than 10 files across different concerns, suggest splitting into multiple focused commits before proceeding.
 
 ### 2. Analyze the diff
 
@@ -49,7 +54,7 @@ From the summary, write a single-line commit title:
 - Use imperative tense following the kernel git commit style guide.
 - Write a high-level title that captures a single specific theme.
 - Do not repeat the file summaries or list individual changes.
-- No more than 60 characters.
+- Keep the title concise — aim for under 50 characters (the full header including prefix and scope should stay under 72 characters).
 - Lowercase the first character.
 - Remove any trailing period.
 
@@ -57,9 +62,9 @@ From the summary, write a single-line commit title:
 
 **Prefix** — choose exactly one label based on the summary:
 
-- `build`: Changes that affect the build system or external dependencies
+- `build`: Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)
 - `chore`: Updating libraries, copyrights, or other repo settings, includes updating dependencies
-- `ci`: Changes to CI configuration files and scripts
+- `ci`: Changes to CI configuration files and scripts (example scopes: Travis, Circle, GitHub Actions)
 - `docs`: Non-code changes, such as fixing typos or adding new documentation
 - `feat`: Introduces a new feature to the codebase
 - `fix`: Patches a bug in the codebase
@@ -68,14 +73,16 @@ From the summary, write a single-line commit title:
 - `style`: Changes that do not affect the meaning of the code (white-space, formatting, etc.)
 - `test`: Adding missing tests or correcting existing tests
 
+**Breaking changes** — if the diff removes or renames a public API, changes a function signature in a breaking way, or makes any other backward-incompatible change, append `!` after the prefix (or after the scope if present). For example: `feat!:` or `feat(api)!:`. Additionally, include a `BREAKING CHANGE:` line in the commit body describing what changed and how to migrate.
+
 **Scope** — identify the module or package scope from the changed files:
 
 - Look at the file paths in the diff to determine which module, package, or component is affected.
 - If all changes are within a single module/package/directory, use that as the scope (e.g., `model`, `git`, `prompt`, `cmd`, `provider`).
 - Use the most specific common directory or package name. For example, changes only in `provider/openai/` should use `openai`, not `provider`.
 - If changes span multiple modules, pick the one most central to the change's purpose.
-- Scope is **required** — always include one.
 - Keep the scope short — a single lowercase word.
+- Scope is **recommended but optional** — if no clear scope can be determined (e.g., changes touch many unrelated areas), omit it and use the format `<prefix>: <title>` instead.
 
 ### 5. Create the commit
 
@@ -87,4 +94,22 @@ Format the commit message as:
 <summary>
 ```
 
-Run `git commit` directly without asking for confirmation.
+Or without scope:
+
+```
+<prefix>: <title>
+
+<summary>
+```
+
+If there is a breaking change, include the footer:
+
+```
+<prefix>(<scope>)!: <title>
+
+<summary>
+
+BREAKING CHANGE: <description of what broke and migration path>
+```
+
+Run `git commit` with the formatted message directly — do not ask for confirmation.
