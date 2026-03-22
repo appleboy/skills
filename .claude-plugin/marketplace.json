@@ -1,0 +1,26 @@
+{
+  "name": "appleboy-skills",
+  "owner": {
+    "name": "appleboy"
+  },
+  "metadata": {
+    "description": "Agent Skills Collection",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "copilot-review-loop",
+      "source": "./plugins/copilot-review-loop",
+      "description": "Automates the iterative PR review loop with GitHub Copilot Review using /loop and gh CLI.",
+      "version": "1.0.0",
+      "author": {
+        "name": "appleboy"
+      },
+      "repository": "https://github.com/appleboy/skills",
+      "license": "MIT",
+      "keywords": ["copilot", "review", "pr", "loop", "github"],
+      "category": "development"
+    }
+  ]
+}
