@@ -123,16 +123,16 @@ git push
 
 ### 7. Resolve fixed threads
 
-After pushing, resolve the threads that were successfully addressed:
+After pushing, resolve each thread that was successfully addressed by inlining its ID:
 
 ```bash
 gh api graphql -f query='
-  mutation($threadId: ID!) {
-    resolveReviewThread(input: {threadId: $threadId}) {
+  mutation {
+    resolveReviewThread(input: {threadId: "<THREAD_NODE_ID>"}) {
       thread { isResolved }
     }
   }
-' -F threadId="<THREAD_NODE_ID>"
+'
 ```
 
 ### 8. Re-trigger Copilot review
