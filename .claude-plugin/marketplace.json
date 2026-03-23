@@ -1,22 +1,31 @@
-[
-  {
-    "name": "commit-message",
-    "description": "Generate a conventional commit message by analyzing staged git changes",
-    "author": {
-      "name": "appleboy"
-    },
-    "source": "./skills/commit-message",
-    "category": "development",
-    "homepage": "https://github.com/appleboy/skills"
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "appleboy-skills",
+  "description": "Agent Skills Collection",
+  "owner": {
+    "name": "appleboy",
+    "email": "appleboy.tw@gmail.com"
   },
-  {
-    "name": "copilot-review",
-    "description": "Single-pass Copilot review check-fix cycle, use with /loop to repeat",
-    "author": {
-      "name": "appleboy"
+  "plugins": [
+    {
+      "name": "commit-message",
+      "description": "Generate a conventional commit message by analyzing staged git changes",
+      "author": {
+        "name": "appleboy"
+      },
+      "source": "./skills/commit-message",
+      "category": "development",
+      "homepage": "https://github.com/appleboy/skills"
     },
-    "source": "./skills/copilot-review",
-    "category": "development",
-    "homepage": "https://github.com/appleboy/skills"
-  }
-]
+    {
+      "name": "copilot-review",
+      "description": "Single-pass Copilot review check-fix cycle, use with /loop to repeat",
+      "author": {
+        "name": "appleboy"
+      },
+      "source": "./skills/copilot-review",
+      "category": "development",
+      "homepage": "https://github.com/appleboy/skills"
+    }
+  ]
+}
