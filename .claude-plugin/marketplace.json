@@ -1,30 +1,22 @@
-{
-  "name": "appleboy-skills",
-  "owner": {
-    "name": "appleboy"
-  },
-  "metadata": {
-    "description": "Agent Skills Collection",
-    "version": "1.0.0"
-  },
-  "plugins": [
-    {
-      "name": "commit-message",
-      "description": "Generate a conventional commit message by analyzing staged git changes",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/commit-message"
-      ]
+[
+  {
+    "name": "commit-message",
+    "description": "Generate a conventional commit message by analyzing staged git changes",
+    "author": {
+      "name": "appleboy"
     },
-    {
-      "name": "copilot-review",
-      "description": "Single-pass Copilot review check-fix cycle, use with /loop to repeat",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/copilot-review"
-      ]
-    }
-  ]
-}
+    "source": "./skills/commit-message",
+    "category": "development",
+    "homepage": "https://github.com/appleboy/skills"
+  },
+  {
+    "name": "copilot-review",
+    "description": "Single-pass Copilot review check-fix cycle, use with /loop to repeat",
+    "author": {
+      "name": "appleboy"
+    },
+    "source": "./skills/copilot-review",
+    "category": "development",
+    "homepage": "https://github.com/appleboy/skills"
+  }
+]
