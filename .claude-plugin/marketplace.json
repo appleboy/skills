@@ -13,7 +13,7 @@
       "author": {
         "name": "appleboy"
       },
-      "source": "./skills/commit-message",
+      "source": "./plugins/commit-message",
       "category": "development",
       "homepage": "https://github.com/appleboy/skills"
     },
@@ -23,7 +23,7 @@
       "author": {
         "name": "appleboy"
       },
-      "source": "./skills/copilot-review",
+      "source": "./plugins/copilot-review",
       "category": "development",
       "homepage": "https://github.com/appleboy/skills"
     }

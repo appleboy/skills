@@ -1,0 +1,9 @@
+{
+  "name": "commit-message",
+  "description": "Generate a conventional commit message by analyzing staged git changes",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}

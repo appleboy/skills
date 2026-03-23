@@ -1,0 +1,9 @@
+{
+  "name": "copilot-review",
+  "description": "Single-pass Copilot review check-fix cycle, use with /loop to repeat",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}
