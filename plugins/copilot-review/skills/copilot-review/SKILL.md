@@ -89,8 +89,6 @@ gh api graphql -f query='
       | sort_by(.submittedAt) | .[-1]
       | {state, submittedAt, body}),
     latestCommit: .data.repository.pullRequest.commits.nodes[-1].commit.committedDate,
-    copilotReviewCount: ([.data.repository.pullRequest.reviews.nodes[]
-      | select(.author.login == "copilot-pull-request-reviewer")] | length),
     unresolvedThreads: [.data.repository.pullRequest.reviewThreads.nodes[]
       | select(.isResolved == false)
       | select(.comments.nodes[0].author.login == "copilot-pull-request-reviewer")
@@ -107,7 +105,7 @@ Apply the following decision logic in order:
 
 1. **No Copilot review exists yet** — report "No Copilot review found, triggering one..." → run `gh pr edit ... --add-reviewer "@copilot"` → **stop, wait for next cycle**.
 2. **`review.submittedAt` < `latestCommit`** — Copilot has not reviewed the latest push. **Report "Waiting for Copilot to review latest push..." and stop.**
-3. **Re-trigger pending check** — If you re-triggered Copilot in a previous cycle (Step 8), compare the current `copilotReviewCount` and `review.submittedAt` with the values you recorded at the end of that cycle. If **both are unchanged** (same count, same timestamp), the re-triggered review has not arrived yet. **Report "Waiting for re-triggered Copilot review to arrive..." and stop.** If either value changed (count increased or `submittedAt` is newer), the new review has arrived — clear your stored values and continue to check #4.
+3. **`review.submittedAt` <= `lastSeenReviewAt`** — If you recorded a `lastSeenReviewAt` value from a previous cycle (Step 8), and the current `review.submittedAt` is equal to or older than that value, the re-triggered review has not arrived yet. **Report "Waiting for re-triggered Copilot review to arrive..." and stop.** If `review.submittedAt` is newer than `lastSeenReviewAt`, the new review has arrived — clear `lastSeenReviewAt` and continue to check #4.
 4. **Parse `review.body`** — Copilot's review summary always contains a line like:
    - `"generated no new comments"` → Copilot reviewed and found nothing. Report "Copilot review passed (no new comments) — ready for human review" and **stop the loop**.
    - `"generated N comments"` (N > 0) → Copilot found issues. **Proceed to Step 3.**
@@ -117,9 +115,9 @@ Apply the following decision logic in order:
 
 The `unresolvedThreads` array from the Step 2 query already contains all unresolved threads authored by Copilot.
 
-If `unresolvedThreads` is **empty** and `review.body` contains `"generated no new comments"`, report "All Copilot comments resolved — ready for human review" and **stop the loop**.
+If `review.body` contains `"generated no new comments"` or matches `"generated 0 comment"`, Copilot found no issues. Report "All Copilot comments resolved — ready for human review" and **stop the loop**.
 
-If `unresolvedThreads` is **empty** but `review.body` contains `"generated N comments"` (N > 0), this means all threads from that review were already resolved. **Stop the loop** — ready for human review.
+If `review.body` contains `"generated N comments"` (N > 0) but `unresolvedThreads` is **empty**, this means all threads were already resolved — but Copilot may find new issues on re-review. **Do NOT stop.** Proceed to Step 7 (resolve any remaining threads) and Step 8 (re-trigger) to let Copilot confirm with a fresh review.
 
 If `unresolvedThreads` is **not empty**, proceed to fix each comment.
 
@@ -133,7 +131,7 @@ For each unresolved comment:
 
 **Do not blindly accept every suggestion.** Copilot may repeat already-resolved comments or suggest changes that conflict with project architecture. If a suggestion is incorrect or irrelevant, skip it and note the reason.
 
-**If no code changes were made** (all suggestions skipped as incorrect or irrelevant), skip Steps 5 and 6 — no tests to run and no commit/push needed. Proceed directly to Step 7 to resolve the evaluated threads, then Step 8 to re-trigger. Note: since no new commit is pushed in this case, the re-trigger pending check (Step 2 check #3) is essential to prevent the next cycle from prematurely stopping.
+**If no code changes were made** (all suggestions skipped as incorrect or irrelevant), skip Steps 5 and 6 — no tests to run and no commit/push needed. Proceed directly to Step 7 to resolve the evaluated threads, then Step 8 to re-trigger. Note: since no new commit is pushed in this case, `lastSeenReviewAt` tracking (Step 2 check #3) is essential to prevent the next cycle from prematurely stopping.
 
 ### 5. Run tests
 
@@ -174,12 +172,7 @@ gh api graphql -f query='
 gh pr edit ${PR_NUM} --repo ${OWNER}/${REPO} --add-reviewer "@copilot"
 ```
 
-**After re-triggering, record the following values for comparison in the next cycle's re-trigger pending check (Step 2 check #3):**
-
-- `copilotReviewCount` — the total number of Copilot reviews seen in this cycle's Step 2 query
-- `review.submittedAt` — the timestamp of the latest Copilot review from this cycle
-
-The next `/loop` cycle will use these recorded values to detect whether a new review has arrived before proceeding.
+**After re-triggering, record `lastSeenReviewAt` = the current `review.submittedAt` from this cycle's Step 2 query.** The next `/loop` cycle will use this value in Step 2 check #3 to detect whether a new review has arrived before proceeding.
 
 ---
 
@@ -223,6 +216,7 @@ gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUM}/comments" \
 - **Copilot reviews are "Comment" type** — they never Approve or Block merge.
 - **Author login mismatch:** REST API returns `author.login` as `"Copilot"`, but GraphQL returns `"copilot-pull-request-reviewer"`. Always use GraphQL with exact match `== "copilot-pull-request-reviewer"` for reliable detection.
 - **Review body is the source of truth** for completion: `"generated no new comments"` means Copilot is done with no issues. `"generated N comments"` means there are comments to address. Do NOT rely solely on unresolved thread count — threads from previous reviews may all be resolved while a new review hasn't arrived yet.
-- **Re-trigger without new commit:** When all suggestions are skipped (no code changes, no new commit), `latestCommit` doesn't change, so the timing check (`review.submittedAt < latestCommit`) alone cannot detect a stale review. The `copilotReviewCount` + `review.submittedAt` comparison (Step 2 check #3) is the reliable mechanism for this case.
+- **Re-trigger without new commit:** When all suggestions are skipped (no code changes, no new commit), `latestCommit` doesn't change, so the timing check (`review.submittedAt < latestCommit`) alone cannot detect a stale review. The `lastSeenReviewAt` comparison (Step 2 check #3) is the reliable mechanism for this case.
+- **Only 0 comments = done:** Do NOT stop the loop just because `unresolvedThreads` is empty. If `review.body` says "generated N comments" (N > 0), threads may have been resolved but Copilot hasn't re-reviewed yet. Only stop when Copilot explicitly reports 0 or no new comments.
 - **Free for open-source repos.** No Copilot subscription required.
 - **Add `.github/copilot-instructions.md`** to guide Copilot's review behavior (coding style, conventions, etc.).
