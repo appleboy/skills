@@ -11,7 +11,7 @@ A single-pass check-fix cycle for Copilot review comments. Designed to be called
 /loop 2m /copilot-review
 ```
 
-Each invocation runs one iteration: check for unresolved comments → fix → push → resolve → re-trigger review. When no comments remain, stop the loop.
+Each invocation runs one iteration: check for unresolved comments → fix → push → resolve → re-trigger review. The loop terminates ONLY when Copilot's review body contains `"generated no new comments"` or `"generated 0 comment"`.
 
 ## Prerequisites
 
@@ -103,11 +103,11 @@ gh api graphql -f query='
 
 Apply the following decision logic in order:
 
-1. **No Copilot review exists yet** — report "No Copilot review found, triggering one..." → run `gh pr edit ... --add-reviewer "@copilot"` → **stop, wait for next cycle**.
-2. **`review.submittedAt` < `latestCommit`** — Copilot has not reviewed the latest push. **Report "Waiting for Copilot to review latest push..." and stop.**
-3. **`review.submittedAt` <= `lastSeenReviewAt`** — If you recorded a `lastSeenReviewAt` value from a previous cycle (Step 8), and the current `review.submittedAt` is equal to or older than that value, the re-triggered review has not arrived yet. **Report "Waiting for re-triggered Copilot review to arrive..." and stop.** If `review.submittedAt` is newer than `lastSeenReviewAt`, the new review has arrived — clear `lastSeenReviewAt` and continue to check #4.
+1. **No Copilot review exists yet** — report "No Copilot review found, triggering one..." → run `gh pr edit ... --add-reviewer "@copilot"` → **return (end this cycle, wait for next `/loop` invocation).**
+2. **`review.submittedAt` < `latestCommit`** — Copilot has not reviewed the latest push. **Report "Waiting for Copilot to review latest push..." and return (end this cycle; do NOT stop the loop).**
+3. **`review.submittedAt` <= `lastSeenReviewAt`** — If you recorded a `lastSeenReviewAt` value from a previous cycle (Step 8), and the current `review.submittedAt` is equal to or older than that value, the re-triggered review has not arrived yet. **Report "Waiting for re-triggered Copilot review to arrive..." and return (end this cycle; do NOT stop the loop).** Do NOT reason about whether Copilot "will" or "won't" re-review. Copilot was already re-triggered in the previous cycle's Step 8 — it WILL produce a new review; it simply hasn't arrived yet. This is true even when all threads are resolved and no code was pushed. NEVER terminate the loop from this check. If `review.submittedAt` is newer than `lastSeenReviewAt`, the new review has arrived — clear `lastSeenReviewAt` and continue to check #4.
 4. **Parse `review.body`** — Copilot's review summary always contains a line like:
-   - `"generated no new comments"` → Copilot reviewed and found nothing. Report "Copilot review passed (no new comments) — ready for human review" and **stop the loop**.
+   - `"generated no new comments"` or `"generated 0 comment"` → Copilot reviewed and found nothing. Report "Copilot review passed (no new comments) — ready for human review" and **STOP THE LOOP (terminate entirely).** This is the ONLY check that may terminate the loop.
    - `"generated N comments"` (N > 0) → Copilot found issues. **Proceed to Step 3.**
    - If the body doesn't match either pattern (e.g., first overview-only review), **proceed to Step 3** to check for unresolved threads anyway.
 
@@ -131,7 +131,7 @@ For each unresolved comment:
 
 **Do not blindly accept every suggestion.** Copilot may repeat already-resolved comments or suggest changes that conflict with project architecture. If a suggestion is incorrect or irrelevant, skip it and note the reason.
 
-**If no code changes were made** (all suggestions skipped as incorrect or irrelevant), skip Steps 5 and 6 — no tests to run and no commit/push needed. Proceed directly to Step 7 to resolve the evaluated threads, then Step 8 to re-trigger. Note: since no new commit is pushed in this case, `lastSeenReviewAt` tracking (Step 2 check #3) is essential to prevent the next cycle from prematurely stopping.
+**If no code changes were made** (all suggestions skipped as incorrect or irrelevant), skip Steps 5 and 6 — no tests to run and no commit/push needed. Proceed directly to Step 7 to resolve the evaluated threads, then Step 8 to re-trigger. Note: since no new commit is pushed in this case, `lastSeenReviewAt` tracking (Step 2 check #3) is essential so the next cycle's Check #3 will correctly return (end that cycle) while waiting for the re-triggered review, rather than proceeding with stale data. The re-triggered review WILL arrive eventually — the next cycle just needs to wait.
 
 ### 5. Run tests
 
@@ -217,6 +217,7 @@ gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUM}/comments" \
 - **Author login mismatch:** REST API returns `author.login` as `"Copilot"`, but GraphQL returns `"copilot-pull-request-reviewer"`. Always use GraphQL with exact match `== "copilot-pull-request-reviewer"` for reliable detection.
 - **Review body is the source of truth** for completion: `"generated no new comments"` means Copilot is done with no issues. `"generated N comments"` means there are comments to address. Do NOT rely solely on unresolved thread count — threads from previous reviews may all be resolved while a new review hasn't arrived yet.
 - **Re-trigger without new commit:** When all suggestions are skipped (no code changes, no new commit), `latestCommit` doesn't change, so the timing check (`review.submittedAt < latestCommit`) alone cannot detect a stale review. The `lastSeenReviewAt` comparison (Step 2 check #3) is the reliable mechanism for this case.
-- **Only 0 comments = done:** Do NOT stop the loop just because `unresolvedThreads` is empty. If `review.body` says "generated N comments" (N > 0), threads may have been resolved but Copilot hasn't re-reviewed yet. Only stop when Copilot explicitly reports 0 or no new comments.
+- **"Return" vs "stop the loop":** Checks #1, #2, and #3 in Step 2 use "return" to mean "end this cycle and let `/loop` call the skill again later." They NEVER terminate the loop. Only Check #4 (`"generated no new comments"` / `"generated 0 comment"`) may terminate the loop entirely. When Check #3 fires (re-triggered review hasn't arrived), do NOT combine it with observations like "all threads are resolved" or "no code was pushed" to conclude the loop should stop. Copilot will produce a new review after being re-triggered — it just takes time.
+- **Only 0 comments = done:** Do NOT stop the loop just because `unresolvedThreads` is empty or because all threads are resolved. If `review.body` says "generated N comments" (N > 0), threads may have been resolved but Copilot hasn't re-reviewed yet. Only terminate the loop when Copilot explicitly reports `"generated no new comments"` or `"generated 0 comment"` in `review.body`. No other condition — not empty threads, not "no code pushed", not any combination — justifies terminating the loop.
 - **Free for open-source repos.** No Copilot subscription required.
 - **Add `.github/copilot-instructions.md`** to guide Copilot's review behavior (coding style, conventions, etc.).
