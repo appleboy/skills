@@ -18,14 +18,16 @@ Then install the skills you need:
 ```bash
 /plugin install commit-message
 /plugin install copilot-review
+/plugin install prompt-audit
 ```
 
 ## Available Skills
 
-| Skill                 | Description                                                            |
-| --------------------- | ---------------------------------------------------------------------- |
-| `commit-message`      | Generate a conventional commit message by analyzing staged git changes |
-| `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat |
+| Skill                 | Description                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `commit-message`      | Generate a conventional commit message by analyzing staged git changes               |
+| `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat               |
+| `prompt-audit`        | Audit a prompt against the 6 essential elements and produce an improved rewrite      |
 
 ## References
 

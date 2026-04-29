@@ -1,0 +1,9 @@
+{
+  "name": "prompt-audit",
+  "description": "Audit a prompt for completeness against the 6 essential elements before sending it to Claude",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}
