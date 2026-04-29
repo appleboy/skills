@@ -35,6 +35,16 @@
       "source": "./plugins/prompt-audit",
       "category": "development",
       "homepage": "https://github.com/appleboy/skills"
+    },
+    {
+      "name": "pr-prepare",
+      "description": "Prepare a structured PR description that discloses AI authorship, classifies change impact, and runs the pre-submit checklist",
+      "author": {
+        "name": "appleboy"
+      },
+      "source": "./plugins/pr-prepare",
+      "category": "development",
+      "homepage": "https://github.com/appleboy/skills"
     }
   ]
 }

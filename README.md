@@ -19,6 +19,7 @@ Then install the skills you need:
 /plugin install commit-message
 /plugin install copilot-review
 /plugin install prompt-audit
+/plugin install pr-prepare
 ```
 
 ## Available Skills
@@ -28,6 +29,7 @@ Then install the skills you need:
 | `commit-message`      | Generate a conventional commit message by analyzing staged git changes               |
 | `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat               |
 | `prompt-audit`        | Audit a prompt against the 6 essential elements and produce an improved rewrite      |
+| `pr-prepare`          | Prepare a PR description with AI-authorship disclosure and pre-submit checklist      |
 
 ## References
 
