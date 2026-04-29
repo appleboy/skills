@@ -1,0 +1,9 @@
+{
+  "name": "code-review",
+  "description": "Review a PR with rigor calibrated to leaf vs core classification, validating PR description, anti-patterns, and verification depth",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}
