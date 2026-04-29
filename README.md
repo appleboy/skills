@@ -22,6 +22,7 @@ Then install the skills you need:
 /plugin install pr-prepare
 /plugin install plan-feature
 /plugin install code-review
+/plugin install classify-change
 ```
 
 ## Available Skills
@@ -34,6 +35,7 @@ Then install the skills you need:
 | `pr-prepare`          | Prepare a PR description with AI-authorship disclosure and pre-submit checklist      |
 | `plan-feature`        | Plan a feature before coding and produce a `plan.md` handoff document                |
 | `code-review`         | Review a PR with rigor calibrated to leaf vs core classification                     |
+| `classify-change`     | Classify a change as leaf or core to decide AI involvement and review rigor          |
 
 ## References
 

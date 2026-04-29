@@ -1,0 +1,9 @@
+{
+  "name": "classify-change",
+  "description": "Classify a proposed code change as leaf node or core code to decide AI involvement and review rigor",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}

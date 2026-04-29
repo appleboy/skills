@@ -65,6 +65,16 @@
       "source": "./plugins/code-review",
       "category": "development",
       "homepage": "https://github.com/appleboy/skills"
+    },
+    {
+      "name": "classify-change",
+      "description": "Classify a proposed code change as leaf node or core code to decide AI involvement and review rigor",
+      "author": {
+        "name": "appleboy"
+      },
+      "source": "./plugins/classify-change",
+      "category": "development",
+      "homepage": "https://github.com/appleboy/skills"
     }
   ]
 }
