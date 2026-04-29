@@ -20,6 +20,7 @@ Then install the skills you need:
 /plugin install copilot-review
 /plugin install prompt-audit
 /plugin install pr-prepare
+/plugin install plan-feature
 ```
 
 ## Available Skills
@@ -30,6 +31,7 @@ Then install the skills you need:
 | `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat               |
 | `prompt-audit`        | Audit a prompt against the 6 essential elements and produce an improved rewrite      |
 | `pr-prepare`          | Prepare a PR description with AI-authorship disclosure and pre-submit checklist      |
+| `plan-feature`        | Plan a feature before coding and produce a `plan.md` handoff document                |
 
 ## References
 

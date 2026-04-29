@@ -1,0 +1,9 @@
+{
+  "name": "plan-feature",
+  "description": "Plan a feature before writing any code by clarifying goals, exploring the codebase, and producing a plan.md handoff document",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}
