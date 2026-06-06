@@ -98,7 +98,7 @@ Pick the diagram type from what the change actually _is_:
 Rules that keep the diagram honest and renderable:
 
 - **Derive every node from the diff, not from imagination.** Each box must map to a file, function, package, or service the PR actually touches. If you can't trace a node back to a changed line, delete it. A diagram of the _ideal_ architecture instead of the _actual_ change misleads reviewers — the same failure mode as a vague "fixes the bug" summary.
-- **Mark what changed.** Give new/modified elements a distinct node style, e.g. `style NewSvc fill:#dff0d8,stroke:#3c763d`. Per-node `style` lines work; `%%{init: ...}%%` theme directives do **not** — GitHub strips them.
+- **Mark what changed.** Give new/modified elements a distinct node style, e.g. `style NewSvc fill:#dff0d8,stroke:#3c763d`, and leave the surrounding existing code the diff plugs into in the default style so the boundary is obvious. Per-node `style` lines work; `%%{init: ...}%%` theme directives do **not** — GitHub strips them.
 - **Stay under ~15–20 nodes.** GitHub falls back to plain text (or times out) on very large/complex diagrams. If the change won't fit in that budget, that's a signal the PR should probably be split (see Anti-patterns).
 - **Prefer `TD` over `LR` when wide.** GitHub renders inside the markdown column; wide diagrams force horizontal scroll on desktop and overflow on mobile. Group related nodes in `subgraph` blocks so they wrap.
 - **No `click` handlers / interactivity** — GitHub renders a static SVG and ignores them.
@@ -204,7 +204,7 @@ If you see any of these in the diff, raise them BEFORE producing the PR text. Th
 - Touches files outside the announced scope (if there was a plan.md)
 - Cross-module sprawling diff suggesting it should be split into multiple PRs
 - Long-running / async code with no stress test
-- A diagram with nodes that don't map to changed code (architecture fiction) — fix the diagram, or split the PR if the change really is that big
+- A diagram with nodes that don't map to changed code (architecture fiction) — fix the diagram before producing the PR text
 
 ## Output principles
 
