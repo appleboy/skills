@@ -1,6 +1,6 @@
 ---
 name: pr-prepare
-description: Prepare a Pull Request description that follows team conventions for AI-authored code. Use this skill whenever the user wants to open a PR, push for review, merge a branch, or create a pull request — phrases like "prepare PR", "open a PR", "ready to merge", "PR description", "push this for review", "write a PR", "I'm done, let's ship". Reads the git diff, asks about AI authorship, classifies the change as leaf or core, draws a Mermaid architecture/flow diagram of the change, runs the pre-submit checklist, and outputs a fully-structured PR description ready to paste into GitHub. Trigger even when the user just says "I'm done with the feature" — they almost certainly need a proper PR description before merging.
+description: Prepare a Pull Request description that follows team conventions for AI-authored code. Use this skill whenever the user wants to open a PR, push for review, merge a branch, or create a pull request — phrases like "prepare PR", "open a PR", "ready to merge", "PR description", "push this for review", "write a PR", "I'm done, let's ship". Reads the git diff, asks about AI authorship, classifies the change as leaf or core, runs the pre-submit checklist, draws a Mermaid architecture/flow diagram of the change, and outputs a fully-structured PR description ready to paste into GitHub. Trigger even when the user just says "I'm done with the feature" — they almost certainly need a proper PR description before merging.
 ---
 
 # pr-prepare
@@ -53,7 +53,7 @@ If the user says "I don't remember", flag this as a problem — they should know
 Determine if the change is `leaf` or `core`:
 
 - **Leaf node**: nothing else depends on it. Reports, single endpoints, UI components, scripts, one-off migrations. Failure is local.
-- **Core code**: many things depend on it. Auth, payments, data schema, shared frameworks, public APIs. Failure is system-wide.
+- **Core code**: many things depend on it. Auth, payments, data schema, shared frameworks, public APIs, orchestrators. Failure is system-wide.
 
 If the change touches both, mark it `core` (the stricter rules apply to the whole PR).
 
@@ -74,6 +74,7 @@ If the change is core or has fewer than 3 tests, surface this to the user before
 
 Before producing the PR text, walk through this checklist with the user. Ask only about items that aren't obviously satisfied from the diff:
 
+- [ ] A plan exists — plan.md or at least a written goal + scope (required even for leaf work, though it can be lightweight; code review will bounce a PR that has none)
 - [ ] PR is scoped (< 500 lines for human-reviewable; if larger, was this coordinated in advance?)
 - [ ] All tests pass locally
 - [ ] No secrets / API keys / credentials in the diff
@@ -84,7 +85,7 @@ If anything fails, stop and surface it. Do not produce the PR description for a 
 
 ### Step 6 — Map the change as a diagram
 
-A diagram beats a paragraph for showing _how the change fits together_. Draw it as a **Mermaid** diagram: GitHub renders Mermaid natively in PR bodies (and Gitea does too), so it travels inside the description with no image hosting and diffs cleanly when the architecture changes.
+A diagram beats a paragraph for showing _how the change fits together_. Draw it as a **Mermaid** diagram: GitHub renders Mermaid natively in PR bodies (GitLab and Gitea do too), so it travels inside the description with no image hosting and diffs cleanly when the architecture changes. The rendering rules below are GitHub's — the strictest of the common hosts — so a diagram that satisfies them renders everywhere; on other hosts you can relax them (e.g. Gitea honors `%%{init}%%` themes and larger graphs).
 
 Pick the diagram type from what the change actually _is_:
 
@@ -150,7 +151,7 @@ sequenceDiagram
 
 ## Plan reference
 
-<link to plan.md, or paste the goal section if no plan>
+<link to plan.md, or paste its goal + scope section>
 
 ## Verification
 
@@ -163,7 +164,7 @@ sequenceDiagram
 ## Verifiability check
 
 - [x] Inputs and outputs are documented
-- [x] Reviewer can judge correctness without reading every line of implementation
+- [ ] Reviewer can judge correctness from interface + tests alone (leaf only — core still needs line-by-line review)
 - [x] Failures will surface in monitoring
 
 ## Security check (only if PR touches external interfaces)

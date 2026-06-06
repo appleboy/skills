@@ -96,7 +96,7 @@ If the user's task isn't big enough to need all six, drop the unused ones rather
 End the audit with a direct comparison so the user sees the gain. Example:
 
 ```
-Before (62 words): "Add a user activity report endpoint."
+Before (6 words): "Add a user activity report endpoint."
 After (~250 words): <full structured prompt>
 Why the rewrite is better: scope is now explicit, existing pattern named, verification defined, done measurable.
 ```

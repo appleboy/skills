@@ -1,6 +1,6 @@
 ---
 name: commit-message
-description: "Generate a conventional commit message by analyzing staged git changes. Use when the user wants to create, write, or generate a git commit message from their current staged diff. Trigger on phrases like \"commit\", \"commit message\", \"commit msg\", \"寫 commit\", \"提交訊息\", \"generate commit\", or when the user has just finished making code changes and wants to commit them. Also trigger when the user runs /commit."
+description: "Generate a conventional commit message by analyzing staged git changes. Use when the user wants to create, write, or generate a git commit message from their current staged diff. Trigger on phrases like \"commit\", \"commit message\", \"commit msg\", \"寫 commit\", \"提交訊息\", \"generate commit\", or when the user has just finished making code changes and wants to commit them. Also trigger when the user runs /commit-message."
 ---
 
 # Generate Commit Message
