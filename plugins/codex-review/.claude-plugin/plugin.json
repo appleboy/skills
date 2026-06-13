@@ -1,0 +1,9 @@
+{
+  "name": "codex-review",
+  "description": "Single-pass Codex (ChatGPT) review check-fix cycle, use with /loop to repeat",
+  "author": {
+    "name": "appleboy"
+  },
+  "category": "development",
+  "homepage": "https://github.com/appleboy/skills"
+}

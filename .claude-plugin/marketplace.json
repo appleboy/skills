@@ -27,6 +27,16 @@
       "homepage": "https://github.com/appleboy/skills"
     },
     {
+      "name": "codex-review",
+      "description": "Single-pass Codex (ChatGPT) review check-fix cycle, use with /loop to repeat",
+      "author": {
+        "name": "appleboy"
+      },
+      "source": "./plugins/codex-review",
+      "category": "development",
+      "homepage": "https://github.com/appleboy/skills"
+    },
+    {
       "name": "prompt-audit",
       "description": "Audit a prompt for completeness against the 6 essential elements before sending it to Claude",
       "author": {
