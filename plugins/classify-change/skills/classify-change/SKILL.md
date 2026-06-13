@@ -16,7 +16,7 @@ Use whenever the leaf-vs-core distinction matters. Triggers include:
 - "Should I vibe code this / can AI write this?"
 - "How carefully do I need to review this?"
 - Before starting non-trivial work, even when the user didn't ask
-- Before or during `plan-feature`, `pr-prepare`, or `code-review`, when the leaf/core call should be explicit and consistent with this framework
+- Before or during `plan-feature` or `pr-prepare`, when the leaf/core call should be explicit and consistent with this framework
 
 Skip only for changes that are obviously trivial (typo fixes, etc.).
 
@@ -139,4 +139,4 @@ True. Today's core might be tomorrow's leaf as models become more reliable. Tech
 
 ## Stopping condition
 
-End the skill when the user has a clear classification + the recommended approach for it. Carry the classification into `plan-feature`, `pr-prepare`, or `code-review` to set the review rigor there — this skill is the canonical owner of the leaf/core definition those workflows should follow.
+End the skill when the user has a clear classification + the recommended approach for it. Carry the classification into `plan-feature` or `pr-prepare` to set the review rigor there — this skill is the canonical owner of the leaf/core definition those workflows should follow.

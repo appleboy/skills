@@ -57,16 +57,6 @@
       "homepage": "https://github.com/appleboy/skills"
     },
     {
-      "name": "code-review",
-      "description": "Review a PR with rigor calibrated to leaf vs core classification, validating PR description, anti-patterns, and verification depth",
-      "author": {
-        "name": "appleboy"
-      },
-      "source": "./plugins/code-review",
-      "category": "development",
-      "homepage": "https://github.com/appleboy/skills"
-    },
-    {
       "name": "classify-change",
       "description": "Classify a proposed code change as leaf node or core code to decide AI involvement and review rigor",
       "author": {
