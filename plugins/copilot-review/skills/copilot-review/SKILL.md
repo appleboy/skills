@@ -11,7 +11,7 @@ A single-pass check-fix cycle for Copilot review comments. Designed to be called
 /loop 2m /copilot-review
 ```
 
-Each invocation runs one iteration: check for unresolved comments → fix → push → resolve → re-trigger review. The loop terminates ONLY when Copilot's review body contains `"generated no new comments"` or `"generated 0 comment"`.
+Each invocation runs one iteration: check for unresolved comments → fix → push → reply with a fix report → resolve → re-trigger review. The loop terminates ONLY when Copilot's review body contains `"generated no new comments"` or `"generated 0 comment"`.
 
 ## Prerequisites
 
@@ -70,6 +70,7 @@ gh api graphql -f query='
             isResolved
             comments(first: 10) {
               nodes {
+                databaseId
                 body
                 author { login }
                 path
@@ -94,6 +95,7 @@ gh api graphql -f query='
       | select(.comments.nodes[0].author.login == "copilot-pull-request-reviewer")
       | {
           threadId: .id,
+          commentId: .comments.nodes[0].databaseId,
           path: .comments.nodes[0].path,
           line: (.comments.nodes[0].line // .comments.nodes[0].originalLine),
           comment: .comments.nodes[0].body
@@ -152,9 +154,32 @@ After committing, push the changes:
 git push
 ```
 
-### 7. Resolve fixed threads
+### 7. Reply to each thread with a fix report
 
-After pushing, resolve each thread that was successfully addressed by inlining its ID:
+**Before resolving, post a reply on each addressed thread so the reviewer can see exactly what changed.** This is the audit trail — a resolved thread with no explanation forces the reviewer to diff the code to understand the fix. Reply using the thread's first-comment `commentId` (the `databaseId` from the Step 2 query):
+
+```bash
+gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUM}/comments/<COMMENT_ID>/replies" \
+  -f body="$(cat <<'EOF'
+Fixed in dff6b1f — Keep cached JWKS keys when an unknown-kid refetch fails.
+
+**Fix:** `internal/jwks/remote.go` (`GetKey`). Previously, a refetch triggered by an unknown `kid` overwrote the in-memory cache with the network response *before* checking the error — so a provider outage (or any non-200) wiped every still-valid key and broke verification for tokens that were perfectly fine. The fix moves the cache assignment to *after* the error check: on a failed refetch we now log and return the existing cached keys untouched, and only replace the cache when the fetch actually succeeds. This makes the cache fail-open against transient outages instead of fail-closed.
+**Test:** `TestFetcher_UnknownKidKeepsCacheOnRefetchFailure`. Seeds the cache with a known-good key, then points the fetcher at a server returning 500 to simulate an outage. It calls `GetKey` with an unknown `kid` to force a refetch (which is expected to fail), and asserts (a) the call returns the refetch error AND (b) a subsequent `GetKey` for the original `kid` still resolves from cache. Without the fix, step (b) fails because the cache was clobbered — so the test pins the exact regression, not just "the happy path still works".
+EOF
+)"
+```
+
+Each reply MUST contain all three parts, and each must **explain**, not just label:
+
+1. **`Fixed in <commit> — <one-line summary>.`** — use the real commit SHA from `git rev-parse --short HEAD` (or the commit that carried this fix), not a placeholder.
+2. **`Fix:`** — name the file and function/symbol, then describe the actual change and **why it resolves the finding**: what the old code did wrong, what the new code does instead, and the reasoning that makes it correct. A bare file path is not enough — the reviewer should understand the fix without opening the diff.
+3. **`Test:`** — name the test, then describe **what scenario it sets up, what it asserts, and why that proves the fix** (ideally: how the test fails on the old code). State the regression it pins down, not just "it tests the function".
+
+If a suggestion was **skipped** (declined as incorrect/irrelevant), still reply with a short rationale instead of a fix report, e.g. `Skipped — this conflicts with the existing retry policy in <file>; <reason>.` Then resolve the thread in Step 7b.
+
+### 7b. Resolve fixed threads
+
+After replying, resolve each thread that was successfully addressed by inlining its ID:
 
 ```bash
 gh api graphql -f query='
@@ -219,5 +244,6 @@ gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUM}/comments" \
 - **Re-trigger without new commit:** When all suggestions are skipped (no code changes, no new commit), `latestCommit` doesn't change, so the timing check (`review.submittedAt < latestCommit`) alone cannot detect a stale review. The `lastSeenReviewAt` comparison (Step 2 check #3) is the reliable mechanism for this case.
 - **"Return" vs "stop the loop":** Checks #1, #2, and #3 in Step 2 use "return" to mean "end this cycle and let `/loop` call the skill again later." They NEVER terminate the loop. Only Check #4 (`"generated no new comments"` / `"generated 0 comment"`) may terminate the loop entirely. When Check #3 fires (re-triggered review hasn't arrived), do NOT combine it with observations like "all threads are resolved" or "no code was pushed" to conclude the loop should stop. Copilot will produce a new review after being re-triggered — it just takes time.
 - **Only 0 comments = done:** Do NOT stop the loop just because `unresolvedThreads` is empty or because all threads are resolved. If `review.body` says "generated N comments" (N > 0), threads may have been resolved but Copilot hasn't re-reviewed yet. Only terminate the loop when Copilot explicitly reports `"generated no new comments"` or `"generated 0 comment"` in `review.body`. No other condition — not empty threads, not "no code pushed", not any combination — justifies terminating the loop.
+- **Always reply before resolving.** Every addressed thread gets a reply with the fix report: the commit SHA, a `Fix:` that explains what the old code did wrong and why the new code is correct (not just a file path), and a `Test:` that describes the scenario, the assertion, and how it fails on the old code (not just a test name). The reviewer should understand the change without opening the diff. Skipped suggestions get a short rationale reply. Reply via `POST /repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies` using the thread's first-comment `databaseId`.
 - **Free for open-source repos.** No Copilot subscription required.
 - **Add `.github/copilot-instructions.md`** to guide Copilot's review behavior (coding style, conventions, etc.).
