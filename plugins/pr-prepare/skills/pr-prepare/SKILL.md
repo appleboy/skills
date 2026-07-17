@@ -29,10 +29,12 @@ Gather the current state before making changes:
 git status --short
 git branch --show-current
 git remote -v
-git config --get branch.<current-branch>.remote
-git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'
+git config --get "branch.$(git branch --show-current).remote" || echo "no tracking remote configured"
+git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || echo "no upstream configured"
 git log --oneline -20
 ```
+
+A missing tracking remote or upstream is expected before the first push; treat both as informational, not as failures.
 
 Determine the base branch from repository configuration or the remote default branch. If it is still unclear, ask the user; common values are `main` and `develop`.
 
@@ -303,6 +305,7 @@ For GitHub, query existing PRs with `gh`:
 ```bash
 gh pr list \
   --head <head-branch> \
+  --base <base-branch> \
   --state all \
   --json number,state,url,title,body,baseRefName,headRefName
 ```
@@ -346,10 +349,11 @@ Do not force issue identifiers into the title when repository conventions place 
 
 Verify the result with the same provider and context used to create it.
 
-For GitHub:
+For GitHub, pass the PR number returned by creation or found by the exact head/base query:
 
 ```bash
-gh pr view --json number,title,url,state,baseRefName,headRefName,body
+gh pr view <pr-number> \
+  --json number,title,url,state,baseRefName,headRefName,body
 ```
 
 For Gitea, pass the PR index returned by creation or found by the exact head/base query:
