@@ -36,7 +36,9 @@ git log --oneline -20
 
 A missing tracking remote or upstream is expected before the first push; treat both as informational, not as failures.
 
-Remote URLs can carry credentials in their userinfo (for example `https://x-access-token:<token>@host/owner/repo.git`), so `git remote -v` is piped through `sed` to mask that segment before it reaches output or logs. Apply the same redaction to any other command that echoes a remote URL. The mask preserves the scheme, host, and path that the steps below need for provider detection, and leaves credential-free URLs — including scp-style `git@host:owner/repo.git` — unchanged.
+Remote URLs can carry credentials in their userinfo (for example `https://x-access-token:<token>@host/owner/repo.git`), so `git remote -v` is piped through `sed` to mask that segment before it reaches output or logs. Apply the same redaction to any other command that echoes a remote URL.
+
+The mask replaces the userinfo of any scheme-qualified URL, whether or not it holds a secret — `ssh://git@host/owner/repo.git` becomes `ssh://***@host/owner/repo.git`, hiding a username that was never sensitive. That is deliberate: erring toward masking costs only a well-known username, while a narrower pattern risks missing a real token. URLs with no userinfo and scp-style `git@host:owner/repo.git` (which has no `://`) pass through untouched. Scheme, host, and path always survive, so provider detection below still has what it needs.
 
 Determine the base branch from repository configuration or the remote default branch. If it is still unclear, ask the user; common values are `main` and `develop`.
 
