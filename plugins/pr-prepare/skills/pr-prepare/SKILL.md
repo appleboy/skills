@@ -308,11 +308,14 @@ For GitHub, query existing PRs with `gh`:
 
 ```bash
 gh pr list \
+  --repo <base-owner>/<base-repo> \
   --head <head-branch> \
   --base <base-branch> \
   --state all \
   --json number,state,url,title,baseRefName,headRefName,headRepositoryOwner
 ```
+
+Pin every `gh` call in this step to the base repository with `--repo <base-owner>/<base-repo>`. Without it `gh` infers the repository from the local checkout's remotes, which in a fork clone resolves to the fork rather than the repository that should receive the PR — so the lookup can miss an existing upstream PR and the workflow creates a duplicate. This mirrors the `--remote`/`--repo` context the Gitea commands below already pin.
 
 Pass `--head` a bare branch name. `gh pr list --head` does not support `<owner>:<branch>`, and it returns an empty list rather than an error when given one — which reads as "no existing PR" and causes a duplicate. When the head branch lives in a fork, or the same branch name could exist across forks, filter the returned `headRepositoryOwner.login` for the expected head owner instead of encoding the owner in `--head`.
 
@@ -332,6 +335,7 @@ For GitHub:
 
 ```bash
 gh pr create \
+  --repo <base-owner>/<base-repo> \
   --base <base-branch> \
   --head <head-branch> \
   --title "<title>" \
@@ -339,6 +343,8 @@ gh pr create \
 ```
 
 When the GitHub head branch is in a fork, use `--head <head-owner>:<head-branch>`; `gh pr create --head` accepts that form to select a head repo owned by another user. It does not accept an organization as the owner, so for an org-owned fork run `gh` against that repository context instead. Unlike `gh pr list`, an explicit owner here is required for fork-based creation, not optional.
+
+The two flags pin opposite ends and are both needed in a fork workflow: `--repo` fixes the repository the PR is opened against, `--head` fixes the repository the commits come from. `--repo` also keeps creation non-interactive — left to infer an ambiguous context, `gh` may prompt, which stalls an unattended run.
 
 For Gitea, pass the body through `--description` because `tea pulls create` has no body-file option:
 
@@ -361,8 +367,11 @@ For GitHub, pass the PR number returned by creation or found by the exact head/b
 
 ```bash
 gh pr view <pr-number> \
+  --repo <base-owner>/<base-repo> \
   --json number,title,url,state,baseRefName,headRefName,body
 ```
+
+A PR number is only unique within a repository, so `--repo` is what makes the number resolve against the intended one. Without it, a rerun from a fork clone can return a different repository's PR of the same number and report a false pass.
 
 For Gitea, pass the PR index returned by creation or found by the exact head/base query:
 
