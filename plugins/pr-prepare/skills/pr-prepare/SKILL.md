@@ -49,7 +49,7 @@ In Execute mode, resolve a writable push remote instead of assuming it is named 
 Detect the hosting provider from the selected remote URL and record the matching CLI context:
 
 - **GitHub**: Use `gh`. Verify authentication with `gh auth status`.
-- **Gitea**: Use `tea`. Inspect `tea --version` and `tea pulls create --help`, verify that a matching login exists with `tea logins list`, and confirm repository access with a read-only `tea pulls list` query.
+- **Gitea**: Use `tea`. Inspect `tea --version` and `tea pulls create --help`, verify that a matching login exists with `tea logins list`, and confirm repository access with a read-only `tea pulls list` query. Run that probe in the same context the PR will be created with — `--remote <gitea-remote>`, or the explicit `--login <gitea-login> --repo <base-owner>/<base-repo>` — as resolved below. Without those flags `tea` falls back to whatever it infers from the local repository, so the probe can pass against a fork or a different server while PR creation still fails against the intended base.
 - If the hostname or provider is ambiguous, ask the user instead of choosing a CLI by guesswork.
 
 For Gitea, resolve `<gitea-remote>` to the base/upstream repository that should receive the PR, then prefer `--remote <gitea-remote>` so `tea` discovers its login and repository. This may differ from the writable push remote in a fork workflow. If the mapping is unavailable or ambiguous, use `--login <gitea-login>` and `--repo <base-owner>/<base-repo>` explicitly. Never print or persist access tokens in the PR body or command output.
