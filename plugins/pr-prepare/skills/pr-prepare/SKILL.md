@@ -1,216 +1,395 @@
 ---
 name: pr-prepare
-description: Prepare a Pull Request description that follows team conventions for AI-authored code. Use this skill whenever the user wants to open a PR, push for review, merge a branch, or create a pull request — phrases like "prepare PR", "open a PR", "ready to merge", "PR description", "push this for review", "write a PR", "I'm done, let's ship". Reads the git diff, asks about AI authorship, classifies the change as leaf or core, runs the pre-submit checklist, draws a Mermaid architecture/flow diagram of the change, and outputs a fully-structured PR description ready to paste into GitHub. Trigger even when the user just says "I'm done with the feature" — they almost certainly need a proper PR description before merging.
+description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, verification checklist, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. For explicit open/push/ship requests, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and only then create the PR with gh or tea. For description-only requests, remain read-only and output the PR body without changing git or remote state.
 ---
 
-# pr-prepare
+# Prepare and open a pull request
 
-Most PRs that contain AI-authored code skip the disclosure that reviewers need to evaluate them properly. This skill produces PR descriptions that make AI authorship, change classification, and verification status explicit — so reviewers know which sections need line-by-line attention and which can be spot-checked. It also draws the change as a diagram, because reviewers grasp structure far faster from a picture than from a file list.
+Produce a reviewable PR and, when explicitly requested, carry it through the safe sequence:
 
-## When to use
+```text
+branch -> verify -> commit -> push -> create PR -> verify PR
+```
 
-Use whenever the user is about to open or push a PR. Triggers include:
+Never skip forward after a failed step. Preserve unrelated user changes and never force-push.
 
-- "Prepare a PR / open PR / push for review"
-- "Write a PR description"
-- "I'm done with the feature, ready to ship"
-- "What should I put in the PR description"
-- Any time the user mentions merging, pushing, or pulling-request a branch
+## Select the operating mode
 
-Skip only if the user explicitly says "I'll write the PR myself" or wants raw diff output.
+- **Execute mode**: The user explicitly asks to open/create a PR, push for review, ship the change, or otherwise perform the workflow. Run the complete sequence.
+- **Draft mode**: The user asks only for a PR description, template, or review of proposed PR text. Read the change and output the PR body, but do not create a branch, stage, commit, push, or create/edit a PR.
+- If the request is ambiguous about remote writes, default to Draft mode and state that no repository state was changed.
 
 ## Workflow
 
-### Step 1 — Read the change
+### Step 1 - Inspect the repository
 
-Use Bash to gather:
+Gather the current state before making changes:
 
-- `git status` — what's staged / dirty
-- `git log <base>..HEAD --oneline` — commit messages on the branch
-- `git diff <base>...HEAD --stat` — file-level summary
-- `git diff <base>...HEAD` for any small files; for large diffs, sample changed sections
+```bash
+git status --short
+git branch --show-current
+git remote -v
+git config --get branch.<current-branch>.remote
+git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'
+git log --oneline -20
+```
 
-While reading, note the _shape_ of the change as well as its content — which files/packages/services are new, which are modified, and how they call each other. This is the raw material for the diagram in Step 6.
+Determine the base branch from repository configuration or the remote default branch. If it is still unclear, ask the user; common values are `main` and `develop`.
 
-If `<base>` isn't obvious, ask the user (commonly `main` or `develop`).
+In Execute mode, resolve a writable push remote instead of assuming it is named `origin`:
 
-### Step 2 — Ask about AI authorship
+- Reuse the remote from an existing correct upstream.
+- Otherwise select the repository's configured writable fork or push remote and verify it with `git remote get-url --push <push-remote>`.
+- If no writable remote is clear, ask the user before pushing.
 
-Ask the user explicitly (don't infer):
+Detect the hosting provider from the selected remote URL and record the matching CLI context:
 
-> "Did AI tools (Claude, Cursor, Copilot, etc.) write any of this code? If yes, which files, and which files did you review line-by-line yourself?"
+- **GitHub**: Use `gh`. Verify authentication with `gh auth status`.
+- **Gitea**: Use `tea`. Inspect `tea --version` and `tea pulls create --help`, verify that a matching login exists with `tea logins list`, and confirm repository access with a read-only `tea pulls list` query.
+- If the hostname or provider is ambiguous, ask the user instead of choosing a CLI by guesswork.
+
+For Gitea, resolve `<gitea-remote>` to the base/upstream repository that should receive the PR, then prefer `--remote <gitea-remote>` so `tea` discovers its login and repository. This may differ from the writable push remote in a fork workflow. If the mapping is unavailable or ambiguous, use `--login <gitea-login>` and `--repo <base-owner>/<base-repo>` explicitly. Never print or persist access tokens in the PR body or command output.
+
+Stop before mutation when any of these conditions apply:
+
+- The repository is in a merge, rebase, cherry-pick, or conflicted state.
+- `HEAD` is detached.
+- The base branch cannot be determined, or Execute mode cannot determine a writable push remote.
+- The working tree mixes the requested change with unrelated edits that cannot be safely separated.
+
+In Execute mode, stop before mutation if the selected provider CLI is unavailable or unauthenticated.
+
+### Step 2 - Resolve issue references and branch name
+
+Collect issue identifiers only from reliable context:
+
+1. The user's request.
+2. An explicit GitHub or Gitea issue URL, or a Jira browse URL.
+3. A plan or task document that clearly identifies the work item.
+
+Recognize:
+
+- GitHub or Gitea issue numbers such as `#123`, `issue 123`, or `/issues/123`.
+- Jira issue keys such as `GAIA-5375` or `/browse/GAIA-5375`.
+
+Do not guess an issue from similar titles. Do not treat an ambiguous `#123` as an issue when it may be a PR number. If more than one repository-host issue or more than one Jira issue could be primary, ask the user which one to use.
+
+Build the branch name as `<type>/<identifiers>-<slug>`:
+
+```text
+feat/add-consent-flow
+feat/123-add-consent-flow
+fix/GAIA-5375-handle-expired-token
+feat/GAIA-5375-123-add-consent-flow
+```
+
+Use the repository's established prefix convention when one exists; otherwise use a concise type such as `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, or `chore`. Preserve Jira keys in uppercase, strip `#` from GitHub or Gitea issue numbers, and keep the lowercase slug short. When both Jira and repository-host identifiers exist, put the Jira key first. Preserve identifiers before shortening an overly long slug.
+
+Validate the result with `git check-ref-format --branch <branch>`.
+
+### Step 3 - Create or confirm the head branch
+
+In Draft mode, skip this step.
+
+In Execute mode, ensure the work is on a dedicated head branch before staging or committing:
+
+- If currently on the base branch, create the new branch with `git switch -c <branch>`; uncommitted changes move with it.
+- If already on the dedicated branch for this work, reuse it so rerunning the skill is idempotent.
+- If currently on another feature branch whose commits may not belong in this PR, ask whether the new branch should start from that `HEAD` or from the base branch. Do not silently include unrelated commits.
+- Check local and remote names before creation. If the desired name belongs to different work, append a numeric suffix such as `-2`; never overwrite or delete it.
+
+Record the base branch, head branch, push remote, and existing upstream for the push and PR commands.
+
+### Step 4 - Read and classify the change
+
+Inspect committed and uncommitted changes that would enter the PR:
+
+```bash
+git log <base>..HEAD --oneline
+git diff <base>...HEAD --stat
+git diff <base>...HEAD
+git diff --stat
+git diff
+git diff --cached --stat
+git diff --cached
+```
+
+For large diffs, read the stat and the important changed sections. Identify files, packages, services, public interfaces, and call relationships.
+
+Classify the whole PR using the stricter applicable category:
+
+- **Leaf**: Failure remains local, such as a report, isolated endpoint, UI component, or one-off script.
+- **Core**: Other components depend on it, such as auth, payments, schemas, shared frameworks, public APIs, or orchestrators.
+
+If the blast radius is unclear, ask: "If this code is buggy, how far would the failure spread?"
+
+### Step 5 - Record AI authorship
+
+Ask explicitly; do not infer:
+
+> Did AI tools write any of this change? If yes, which tool/model and files, and which files did you review line by line yourself?
 
 Record:
 
-- **AI-authored files**: which ones
-- **Human line-by-line reviewed**: which ones
-- **Tool used**: e.g., "Claude Sonnet via Cursor"
+- Tool and model.
+- AI-authored files.
+- Human line-by-line reviewed files.
 
-If the user says "I don't remember", flag this as a problem — they should know before submitting.
+Stop before commit when AI-authored core code has not received a human line-by-line review or when the author cannot identify what was AI-authored.
 
-### Step 3 — Classify the change
+### Step 6 - Verify before commit
 
-Determine if the change is `leaf` or `core`:
+Use repository instructions and existing scripts to run the relevant formatter, lint, tests, and build checks.
 
-- **Leaf node**: nothing else depends on it. Reports, single endpoints, UI components, scripts, one-off migrations. Failure is local.
-- **Core code**: many things depend on it. Auth, payments, data schema, shared frameworks, public APIs, orchestrators. Failure is system-wide.
+- In Execute mode, run the normal required commands and inspect the diff again after any formatter or generator changes files.
+- In Draft mode, preserve the read-only guarantee: use only check or dry-run variants known not to modify tracked files. Do not run formatters, generators, fixers, or other potentially mutating commands; skip them and record `Not run` when no read-only variant exists or their behavior is uncertain.
 
-If the change touches both, mark it `core` (the stricter rules apply to the whole PR).
+Ask only about checklist items that cannot be established from repository evidence:
 
-If unsure, ask the user a quick diagnostic: "If this code is buggy, how far would the failure spread?"
+- [ ] A plan or written goal and scope exists.
+- [ ] The PR is focused and reviewable; coordinate or split unusually large changes.
+- [ ] Relevant tests pass locally.
+- [ ] No secrets, API keys, credentials, or unrelated files are included.
+- [ ] Plan boundaries, including `must not modify`, were respected.
+- [ ] Auth, payment, permission, or external-interface changes received the necessary security review.
+- [ ] Long-running or asynchronous behavior has appropriate stress or soak coverage.
 
-### Step 4 — Detect verification
+Also run `git diff --check` and, after staging, `git diff --staged --check`.
 
-Look at the diff for:
+If a required check fails or cannot be verified, stop. In Execute mode, leave the local head branch intact, but do not commit, push, or create the PR.
 
-- Tests added or modified (count them)
-- Whether tests are end-to-end or implementation-coupled
-- Whether stress / soak tests exist for long-running code
-- Whether logs / metrics were added to important paths
+### Step 7 - Map the change
 
-If the change is core or has fewer than 3 tests, surface this to the user before generating the PR description — they may need to add tests first.
+For a non-trivial change, add a Mermaid diagram derived from the actual diff:
 
-### Step 5 — Run pre-submit checklist
+| Change shape                         | Diagram                        |
+| ------------------------------------ | ------------------------------ |
+| Calls or handshakes over time        | `sequenceDiagram`              |
+| Decisions, control flow, or pipeline | `flowchart TD`                 |
+| Modules, packages, or services       | `flowchart LR` with `subgraph` |
+| Status or lifecycle transitions      | `stateDiagram-v2`              |
 
-Before producing the PR text, walk through this checklist with the user. Ask only about items that aren't obviously satisfied from the diff:
+Keep the diagram honest and renderable:
 
-- [ ] A plan exists — plan.md or at least a written goal + scope (required even for leaf work, though it can be lightweight; code review will bounce a PR that has none)
-- [ ] PR is scoped (< 500 lines for human-reviewable; if larger, was this coordinated in advance?)
-- [ ] All tests pass locally
-- [ ] No secrets / API keys / credentials in the diff
-- [ ] The `must not modify` boundary from the plan was respected (if there was a plan)
-- [ ] If touching auth / payment / external API: extra security review done
+- Map every changed node to a touched file, function, package, or service.
+- Distinguish new or modified nodes with per-node `style` lines.
+- Stay below roughly 15-20 nodes and prefer `TD` when `LR` would be too wide.
+- Do not use `click` handlers or theme initialization directives.
+- Omit the diagram for a one-line fix, copy change, or dependency bump.
 
-If anything fails, stop and surface it. Do not produce the PR description for a PR that shouldn't be opened yet.
+### Step 8 - Prepare the PR body
 
-### Step 6 — Map the change as a diagram
+Match an existing repository PR template when present, including `.github/` templates for GitHub and `.gitea/` templates for Gitea. Otherwise fill this template without inventing evidence:
 
-A diagram beats a paragraph for showing _how the change fits together_. Draw it as a **Mermaid** diagram: GitHub renders Mermaid natively in PR bodies (GitLab and Gitea do too), so it travels inside the description with no image hosting and diffs cleanly when the architecture changes. The rendering rules below are GitHub's — the strictest of the common hosts — so a diagram that satisfies them renders everywhere; on other hosts you can relax them (e.g. Gitea honors `%%{init}%%` themes and larger graphs).
-
-Pick the diagram type from what the change actually _is_:
-
-| The change is mainly about…                                                                                  | Use               | Mermaid header                                |
-| ------------------------------------------------------------------------------------------------------------ | ----------------- | --------------------------------------------- |
-| Interactions/handshakes over time (auth flow, request lifecycle, calls between services / MCP client↔server) | Sequence diagram  | `sequenceDiagram`                             |
-| Control flow, decision logic, or a pipeline (branching, data transform, CI steps)                            | Flowchart         | `flowchart TD`                                |
-| New or rewired modules / packages / services (structural dependencies)                                       | Component diagram | `flowchart LR` with one `subgraph` per module |
-| A state machine (status transitions, token / job lifecycle)                                                  | State diagram     | `stateDiagram-v2`                             |
-
-Rules that keep the diagram honest and renderable:
-
-- **Derive every node from the diff, not from imagination.** Each box must map to a file, function, package, or service the PR actually touches. If you can't trace a node back to a changed line, delete it. A diagram of the _ideal_ architecture instead of the _actual_ change misleads reviewers — the same failure mode as a vague "fixes the bug" summary.
-- **Mark what changed.** Give new/modified elements a distinct node style, e.g. `style NewSvc fill:#dff0d8,stroke:#3c763d`, and leave the surrounding existing code the diff plugs into in the default style so the boundary is obvious. Per-node `style` lines work; `%%{init: ...}%%` theme directives do **not** — GitHub strips them.
-- **Stay under ~15–20 nodes.** GitHub falls back to plain text (or times out) on very large/complex diagrams. If the change won't fit in that budget, that's a signal the PR should probably be split (see Anti-patterns).
-- **Prefer `TD` over `LR` when wide.** GitHub renders inside the markdown column; wide diagrams force horizontal scroll on desktop and overflow on mobile. Group related nodes in `subgraph` blocks so they wrap.
-- **No `click` handlers / interactivity** — GitHub renders a static SVG and ignores them.
-
-If the change is genuinely trivial (one-line fix, copy tweak, dependency bump), skip the diagram and say so — don't draw a one-box graph.
-
-### Step 7 — Produce the PR description
-
-Use this template, filling in everything you know. Leave clearly-marked TODO placeholders only when you don't have the information. The `Architecture / flow` block sits right after the summary so reviewers see the shape before the details.
-
-````markdown
+```markdown
 ## Summary
 
-<1-3 sentences: what this PR does and why>
+<What changed, why, and the mechanism used>
+
+## Related issues
+
+- Jira: <[GAIA-5375](Jira URL), plain key, or N/A>
+- GitHub/Gitea: <Closes #123, Related to #123, full cross-repository URL, or N/A>
 
 ## Architecture / flow
 
-<Mermaid diagram of the change. Omit this section for trivial changes.>
+<Mermaid diagram; omit this section for trivial changes>
 
-```mermaid
-sequenceDiagram
-    participant C as MCP Client
-    participant RS as Resource Server
-    participant AG as AuthGate /introspect
-    C->>RS: request + access_token
-    RS->>AG: POST /introspect (token + client auth)
-    AG->>AG: verify signature, aud, exp
-    AG-->>RS: {active, scope, aud, sub}
-    alt active && aud matches
-        RS-->>C: 200 + resource
-    else
-        RS-->>C: 401 invalid_token
-    end
-```
+## AI authorship
 
-## AI Authorship
-
-- [ ] No AI was used in this PR
-- [x] AI was used. Details:
-  - **Tool / model**: <e.g., Claude Sonnet via Cursor>
+- [ ] No AI was used
+- [ ] AI was used
+  - **Tool / model**: <value>
   - **AI-authored files**: <list>
   - **Human line-by-line reviewed**: <list>
 
 ## Change classification
 
-- [ ] Leaf node (local impact)
-- [x] Core code (broad impact — needs line-by-line review)
-      <or vice versa>
+- [ ] Leaf change
+- [ ] Core change
 
 ## Plan reference
 
-<link to plan.md, or paste its goal + scope section>
+<Link or concise goal and scope>
 
 ## Verification
 
-- [x] Unit tests
-- [x] Integration tests
-- [x] At least 3 e2e tests (1 happy path + 2 errors)
-- [ ] Stress / soak test: <details, or N/A>
-- Manual verification: <steps the reviewer should run>
+- **Automated**: <commands and results>
+- **Manual**: <steps and results>
+- **Not run**: <checks and reason>
 
-## Verifiability check
+## Security check
 
-- [x] Inputs and outputs are documented
-- [ ] Reviewer can judge correctness from interface + tests alone (leaf only — core still needs line-by-line review)
-- [x] Failures will surface in monitoring
+- [ ] No secrets in the diff
+- [ ] External inputs are validated
+- [ ] Permission checks are tested
+- [ ] Errors do not leak internals
+- [ ] N/A - no external or security-sensitive interface changed
 
-## Security check (only if PR touches external interfaces)
-
-- [ ] No secrets in code
-- [ ] All external inputs validated
-- [ ] Permission checks tested
-- [ ] Rate limits applied
-- [ ] Errors don't leak internals
-
-## Risk & rollback
+## Risk and rollback
 
 - **Risk**: <what could break>
-- **Rollback**: <how to revert>
+- **Rollback**: <how to revert safely>
 
 ## Reviewer guide
 
-- **Read carefully**: <files / functions that need close attention>
-- **Spot-check OK**: <files / functions where tests + signatures suffice>
-````
+- **Read carefully**: <high-risk files or functions>
+- **Spot-check**: <lower-risk generated or mechanical changes>
+```
 
-### Step 8 — Hand off
+Use `Closes #123` only when the selected GitHub or Gitea repository supports the closing keyword and the PR should close that issue in the same repository. Otherwise use `Related to #123` or a full URL. Jira keys do not use repository-host closing syntax; link them when the Jira base URL is known and use the plain key otherwise.
 
-After producing the description, tell the user:
+### Step 9 - Stage and commit
 
-1. Where to paste it (typically the GitHub PR body)
-2. Suggested reviewer count: 1 for leaf, 2+ for core (including the module owner)
-3. Suggest a quick render check — paste the Mermaid block into the GitHub PR preview (or the Mermaid Live Editor) to confirm it renders before submitting.
-4. If `gh` CLI is available and the user wants, offer to run `gh pr create --body-file <file>` directly.
+In Draft mode, skip this step.
 
-## Anti-patterns to flag
+First determine whether the intended change is already committed:
 
-If you see any of these in the diff, raise them BEFORE producing the PR text. The user may want to fix them first.
+```bash
+git log <base>..HEAD --oneline
+git diff <base>...HEAD --stat
+git status --short
+```
 
-- AI authored code in core paths with no human line-by-line review noted
-- No tests, just "I tested it locally"
-- AI authorship not disclosed
-- Touches files outside the announced scope (if there was a plan.md)
-- Cross-module sprawling diff suggesting it should be split into multiple PRs
-- Long-running / async code with no stress test
-- A diagram with nodes that don't map to changed code (architecture fiction) — fix the diagram before producing the PR text
+- If `<base>..HEAD` already contains the complete intended change and no task-related uncommitted changes remain, inspect those commits, skip staging and commit creation, and continue to push.
+- If task-related changes remain uncommitted, stage only those files. Never use `git add .` or `git add -A` in a dirty worktree.
+- If there are neither intended commits nor task-related changes, stop because there is nothing to open as a PR.
 
-## Output principles
+When staging is needed, inspect exactly what will be committed:
 
-- **Be specific.** Don't write "fixes the bug" — write what bug, in what file, by what mechanism.
-- **Show the shape.** A diagram of what changed beats a paragraph describing it — but only when every node maps to real changed code.
-- **Match existing PR style** if the repo has a convention. Read recent merged PRs if uncertain.
-- **Lead with what's risky.** Reviewers should immediately see what to scrutinize.
-- **Honest about AI.** Reviewers calibrate effort based on this. Hiding AI authorship is the single biggest source of bad reviews.
+```bash
+git add <task-file-1> <task-file-2>
+git diff --staged --stat
+git diff --staged
+git diff --staged --check
+```
+
+Stop if a non-empty staged diff contains unrelated changes, violates the announced scope, or fails verification. An empty staged diff is valid only when `<base>..HEAD` already contains the complete intended commits; otherwise stop.
+
+Match recent repository commit style. Prefer a focused conventional commit when no stronger convention exists:
+
+```text
+<type>(<scope>): <imperative summary>
+
+<important change bullets, if useful>
+```
+
+When staging was needed, create the commit directly because Execute mode already expresses the user's intent to commit and open the PR. Whether the commit was created now or already existed, verify the intended commit range and `git show --stat --oneline HEAD`, then report any intentionally unstaged user changes.
+
+### Step 10 - Push the branch
+
+Push only after the intended commit was created successfully or verified as already present.
+
+- If the branch already has the correct upstream, preserve it and use `git push`.
+- If the branch has no upstream, use the writable push remote resolved in Step 1.
+- If the existing upstream is wrong or ambiguous, stop and ask before replacing it.
+- On reruns, if the correct upstream already contains `HEAD`, skip the redundant push and continue to PR creation.
+
+```bash
+git push
+git push -u <push-remote> <head-branch>
+```
+
+Use only the command that matches the branch state; do not run both.
+
+Never force-push. If authentication, policy, hooks, or network errors prevent the push, stop and report the exact failure. Keep the local branch and commit for retry; do not create the PR.
+
+### Step 11 - Create and verify the PR
+
+Check whether the exact head and base branch pair already has a PR before creating one. If it does, return the existing PR instead of creating a duplicate; edit it only when the user asks.
+
+For GitHub, query existing PRs with `gh`:
+
+```bash
+gh pr list \
+  --head <head-branch> \
+  --state all \
+  --json number,state,url,title,body,baseRefName,headRefName
+```
+
+For Gitea, query with `tea` and filter the JSON result for the exact head and base. Use the selected `--remote` context, or replace it with the resolved `--login` and optional `--repo` context:
+
+```bash
+tea pulls list \
+  --remote <gitea-remote> \
+  --state all \
+  --fields index,state,url,title,body,base,head \
+  --output json
+```
+
+Save the prepared body to a temporary file, then create the PR only after the push succeeds:
+
+For GitHub:
+
+```bash
+gh pr create \
+  --base <base-branch> \
+  --head <head-branch> \
+  --title "<title>" \
+  --body-file <body-file>
+```
+
+For Gitea, pass the body through `--description` because `tea pulls create` has no body-file option:
+
+```bash
+tea pulls create \
+  --remote <gitea-remote> \
+  --base <base-branch> \
+  --head <head-branch> \
+  --title "<title>" \
+  --description "$(cat <body-file>)"
+```
+
+When the Gitea head branch is in a fork, keep `--remote` pointed at the base/upstream repository and use `--head <head-owner>:<head-branch>`. When remote discovery is unsuitable, replace `--remote <gitea-remote>` with `--login <gitea-login> --repo <base-owner>/<base-repo>`.
+
+Do not force issue identifiers into the title when repository conventions place them only in branch names or the body.
+
+Verify the result with the same provider and context used to create it.
+
+For GitHub:
+
+```bash
+gh pr view --json number,title,url,state,baseRefName,headRefName,body
+```
+
+For Gitea, pass the PR index returned by creation or found by the exact head/base query:
+
+```bash
+tea pulls <pr-index> \
+  --remote <gitea-remote> \
+  --fields index,state,url,title,body,base,head \
+  --output json
+```
+
+Confirm that the PR is open against the intended base, uses the pushed head branch, and contains the expected issue links and body. A PR creation failure leaves the remote branch intact for retry.
+
+## Failure and rerun behavior
+
+- A verification failure stops before commit.
+- A commit failure stops before push.
+- A push failure stops before PR creation.
+- A PR creation failure does not delete or rewrite the pushed branch.
+- A rerun reuses the correct branch, commit, upstream, or existing PR when already present instead of duplicating work.
+- Never use destructive cleanup such as `git reset --hard`, branch deletion, or force-push as automatic recovery.
+
+## Final handoff
+
+Report:
+
+- Operating mode used.
+- Hosting provider and CLI context used.
+- Base and head branches.
+- GitHub/Gitea and Jira issue identifiers included or omitted.
+- Commit SHA and title, if created.
+- Push remote and upstream status, if pushed.
+- PR number and URL, if created or already present.
+- Verification commands and results.
+- Remaining unstaged changes, failed checks, TODOs, and reviewer recommendation: one reviewer for leaf changes, two or more including the module owner for core changes.
+
+## Quality rules
+
+- Be specific about the bug, feature, mechanism, risk, and verification.
+- Match repository branch, commit, and PR conventions before applying defaults.
+- Lead reviewers toward high-risk code and disclose AI authorship honestly.
+- Reject architecture fiction: diagrams and claims must trace back to the actual diff.
+- Flag unreviewed AI-authored core code, missing tests, leaked secrets, scope creep, and sprawling cross-module changes before any push.
