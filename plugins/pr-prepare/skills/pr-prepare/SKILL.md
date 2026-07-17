@@ -302,6 +302,8 @@ Never force-push. If authentication, policy, hooks, or network errors prevent th
 
 Check whether the exact head and base branch pair already has a PR before creating one. If it does, return the existing PR instead of creating a duplicate; edit it only when the user asks.
 
+Both lookups below request only the fields needed to identify a match. They deliberately omit `body`: it has no bearing on whether a PR exists for the pair, and pulling every candidate's full description into the transcript is wasted output. Fetch the body later, from the verification step, once a specific PR is known.
+
 For GitHub, query existing PRs with `gh`:
 
 ```bash
@@ -309,7 +311,7 @@ gh pr list \
   --head <head-branch> \
   --base <base-branch> \
   --state all \
-  --json number,state,url,title,body,baseRefName,headRefName,headRepositoryOwner
+  --json number,state,url,title,baseRefName,headRefName,headRepositoryOwner
 ```
 
 Pass `--head` a bare branch name. `gh pr list --head` does not support `<owner>:<branch>`, and it returns an empty list rather than an error when given one — which reads as "no existing PR" and causes a duplicate. When the head branch lives in a fork, or the same branch name could exist across forks, filter the returned `headRepositoryOwner.login` for the expected head owner instead of encoding the owner in `--head`.
@@ -320,7 +322,7 @@ For Gitea, query with `tea` and filter the JSON result for the exact head and ba
 tea pulls list \
   --remote <gitea-remote> \
   --state all \
-  --fields index,state,url,title,body,base,head \
+  --fields index,state,url,title,base,head \
   --output json
 ```
 
