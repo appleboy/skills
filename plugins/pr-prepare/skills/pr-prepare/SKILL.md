@@ -28,7 +28,7 @@ Gather the current state before making changes:
 ```bash
 git status --short
 git branch --show-current
-git remote -v
+git remote -v | sed -E 's#://[^/@]*@#://***@#g'
 git config --get "branch.$(git branch --show-current).remote" || echo "no tracking remote configured"
 git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || echo "no upstream configured"
 git log --oneline -20
@@ -36,12 +36,14 @@ git log --oneline -20
 
 A missing tracking remote or upstream is expected before the first push; treat both as informational, not as failures.
 
+Remote URLs can carry credentials in their userinfo (for example `https://x-access-token:<token>@host/owner/repo.git`), so `git remote -v` is piped through `sed` to mask that segment before it reaches output or logs. Apply the same redaction to any other command that echoes a remote URL. The mask preserves the scheme, host, and path that the steps below need for provider detection, and leaves credential-free URLs — including scp-style `git@host:owner/repo.git` — unchanged.
+
 Determine the base branch from repository configuration or the remote default branch. If it is still unclear, ask the user; common values are `main` and `develop`.
 
 In Execute mode, resolve a writable push remote instead of assuming it is named `origin`:
 
 - Reuse the remote from an existing correct upstream.
-- Otherwise select the repository's configured writable fork or push remote and verify it with `git remote get-url --push <push-remote>`.
+- Otherwise select the repository's configured writable fork or push remote and verify it with `git remote get-url --push <push-remote> | sed -E 's#://[^/@]*@#://***@#g'`, which masks any credentials embedded in the push URL.
 - If no writable remote is clear, ask the user before pushing.
 
 Detect the hosting provider from the selected remote URL and record the matching CLI context:
