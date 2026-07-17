@@ -307,8 +307,10 @@ gh pr list \
   --head <head-branch> \
   --base <base-branch> \
   --state all \
-  --json number,state,url,title,body,baseRefName,headRefName
+  --json number,state,url,title,body,baseRefName,headRefName,headRepositoryOwner
 ```
+
+Pass `--head` a bare branch name. `gh pr list --head` does not support `<owner>:<branch>`, and it returns an empty list rather than an error when given one — which reads as "no existing PR" and causes a duplicate. When the head branch lives in a fork, or the same branch name could exist across forks, filter the returned `headRepositoryOwner.login` for the expected head owner instead of encoding the owner in `--head`.
 
 For Gitea, query with `tea` and filter the JSON result for the exact head and base. Use the selected `--remote` context, or replace it with the resolved `--login` and optional `--repo` context:
 
@@ -331,6 +333,8 @@ gh pr create \
   --title "<title>" \
   --body-file <body-file>
 ```
+
+When the GitHub head branch is in a fork, use `--head <head-owner>:<head-branch>`; `gh pr create --head` accepts that form to select a head repo owned by another user. It does not accept an organization as the owner, so for an org-owned fork run `gh` against that repository context instead. Unlike `gh pr list`, an explicit owner here is required for fork-based creation, not optional.
 
 For Gitea, pass the body through `--description` because `tea pulls create` has no body-file option:
 
