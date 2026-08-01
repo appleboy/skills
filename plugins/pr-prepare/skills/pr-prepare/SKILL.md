@@ -1,6 +1,6 @@
 ---
 name: pr-prepare
-description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, verification checklist, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a description-only or read-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or tea.
+description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, verification checklist, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or tea.
 ---
 
 # Prepare and open a pull request
@@ -16,7 +16,7 @@ Never skip forward after a failed step. Preserve unrelated user changes and neve
 ## Select the operating mode
 
 - **Execute mode (default)**: Run the complete sequence whenever the user invokes PR preparation, including creating or opening a PR. Do not ask for a final confirmation before creating the branch, committing, pushing, or opening the PR.
-- **Draft mode**: Use only when the user explicitly asks for a PR description, template, or read-only review. Read the change and output the PR body, but do not create a branch, stage, commit, push, or create/edit a PR.
+- **Draft-only mode**: Use only when the user explicitly asks for a draft-only result: a PR description, template, or read-only review. Read the change and output the PR body, but do not create a branch, stage, commit, push, or create/edit a PR.
 
 ## Workflow
 
@@ -94,7 +94,7 @@ Validate the result with `git check-ref-format --branch <branch>`.
 
 ### Step 3 - Create or confirm the head branch
 
-In Draft mode, skip this step.
+In Draft-only mode, skip this step.
 
 In Execute mode, ensure the work is on a dedicated head branch before staging or committing:
 
@@ -143,7 +143,7 @@ Do not treat the lack of human review as a reason to stop. Make the disclosure c
 Use repository instructions and existing scripts to run the relevant formatter, lint, tests, and build checks.
 
 - In Execute mode, run the normal required commands and inspect the diff again after any formatter or generator changes files.
-- In Draft mode, preserve the read-only guarantee: use only check or dry-run variants known not to modify tracked files. Do not run formatters, generators, fixers, or other potentially mutating commands; skip them and record `Not run` when no read-only variant exists or their behavior is uncertain.
+- In Draft-only mode, preserve the read-only guarantee: use only check or dry-run variants known not to modify tracked files. Do not run formatters, generators, fixers, or other potentially mutating commands; skip them and record `Not run` when no read-only variant exists or their behavior is uncertain.
 
 Ask only about checklist items that cannot be established from repository evidence:
 
@@ -242,7 +242,7 @@ Use `Closes #123` only when the selected GitHub or Gitea repository supports the
 
 ### Step 9 - Stage and commit
 
-In Draft mode, skip this step.
+In Draft-only mode, skip this step.
 
 First determine whether the intended change is already committed:
 
