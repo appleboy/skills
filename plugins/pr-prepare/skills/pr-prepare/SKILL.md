@@ -1,11 +1,11 @@
 ---
 name: pr-prepare
-description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, verification checklist, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. For explicit open/push/ship requests, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and only then create the PR with gh or tea. For description-only requests, remain read-only and output the PR body without changing git or remote state.
+description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, verification checklist, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a description-only or read-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or tea.
 ---
 
 # Prepare and open a pull request
 
-Produce a reviewable PR and, when explicitly requested, carry it through the safe sequence:
+Produce a reviewable PR and, unless the user explicitly requests a draft-only result, carry it through the safe sequence:
 
 ```text
 branch -> verify -> commit -> push -> create PR -> verify PR
@@ -15,9 +15,8 @@ Never skip forward after a failed step. Preserve unrelated user changes and neve
 
 ## Select the operating mode
 
-- **Execute mode**: The user explicitly asks to open/create a PR, push for review, ship the change, or otherwise perform the workflow. Run the complete sequence.
-- **Draft mode**: The user asks only for a PR description, template, or review of proposed PR text. Read the change and output the PR body, but do not create a branch, stage, commit, push, or create/edit a PR.
-- If the request is ambiguous about remote writes, default to Draft mode and state that no repository state was changed.
+- **Execute mode (default)**: Run the complete sequence whenever the user invokes PR preparation, including creating or opening a PR. Do not ask for a final confirmation before creating the branch, committing, pushing, or opening the PR.
+- **Draft mode**: Use only when the user explicitly asks for a PR description, template, or read-only review. Read the change and output the PR body, but do not create a branch, stage, commit, push, or create/edit a PR.
 
 ## Workflow
 
@@ -131,17 +130,13 @@ If the blast radius is unclear, ask: "If this code is buggy, how far would the f
 
 ### Step 5 - Record AI authorship
 
-Ask explicitly; do not infer:
+Use the following default disclosure without asking the user for confirmation:
 
-> Did AI tools write any of this change? If yes, which tool/model and files, and which files did you review line by line yourself?
+- **Tool / model**: the AI agent executing this workflow; use its reported model or tool name when available.
+- **AI-authored files**: every task-related file included in the PR.
+- **Human line-by-line reviewed**: `None — not yet reviewed by a human.`
 
-Record:
-
-- Tool and model.
-- AI-authored files.
-- Human line-by-line reviewed files.
-
-Stop before commit when AI-authored core code has not received a human line-by-line review or when the author cannot identify what was AI-authored.
+Do not treat the lack of human review as a reason to stop. Make the disclosure conspicuous in the PR body and final handoff so the PR is opened for human review with an accurate record. If the user supplies more specific authorship or review information, use that instead.
 
 ### Step 6 - Verify before commit
 
@@ -207,7 +202,7 @@ Match an existing repository PR template when present, including `.github/` temp
 - [ ] AI was used
   - **Tool / model**: <value>
   - **AI-authored files**: <list>
-  - **Human line-by-line reviewed**: <list>
+  - **Human line-by-line reviewed**: None — not yet reviewed by a human.
 
 ## Change classification
 
