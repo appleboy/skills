@@ -1,6 +1,6 @@
 ---
 name: pr-prepare
-description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, verification checklist, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or tea.
+description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, reproducible reviewer verification steps, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or tea.
 ---
 
 # Prepare and open a pull request
@@ -159,6 +159,8 @@ Also run `git diff --check` and, after staging, `git diff --staged --check`.
 
 If a required check fails or cannot be verified, stop. In Execute mode, leave the local head branch intact, but do not commit, push, or create the PR.
 
+Record the working directory, prerequisites, exact commands or actions, and observed results while verifying so Step 8 can turn them into reproducible reviewer instructions. Keep expected behavior separate from observed results; a proposed check is not evidence that it passed.
+
 ### Step 7 - Map the change
 
 For a non-trivial change, add a Mermaid diagram derived from the actual diff:
@@ -180,7 +182,20 @@ Keep the diagram honest and renderable:
 
 ### Step 8 - Prepare the PR body
 
-Match an existing repository PR template when present, including `.github/` templates for GitHub and `.gitea/` templates for Gitea. Otherwise fill this template without inventing evidence:
+Match an existing repository PR template when present, including `.github/` templates for GitHub and `.gitea/` templates for Gitea. Put the verification details below in its equivalent testing section, or add a section if none exists. Otherwise fill this template without inventing evidence:
+
+### Write reproducible reviewer verification
+
+The PR body must let a reviewer verify the intended behavior without needing the author's local state or this conversation. Scale detail to the change, but do not reduce verification to "tests pass" or "test manually."
+
+- **Prerequisites and setup**: Identify the PR revision to check out, working directory, relevant runtime/tool versions, dependencies, services, configuration, test data, and account roles. Give the actual setup/start commands and readiness signal where needed. Use safe sample data and environment-variable names, never credentials. Link maintained setup documentation for lengthy standard setup, but keep PR-specific instructions in the body.
+- **Behavioral scenarios**: Derive acceptance conditions from the requested goal or issue and confirm them against the diff. Include the main changed flow and relevant failure, boundary, permission, or regression cases; omit unrelated cases. For a bug fix, describe the original trigger and corrected outcome. For a refactor, state which behavior should remain unchanged. For documentation or skill changes, provide a concrete inspection or representative usage scenario instead of inventing application commands.
+- **Steps and expected results**: For each scenario, state the starting state and provide numbered actions with concrete inputs, commands, requests, or UI navigation. Pair each meaningful step with observable expected output or state, such as HTTP status/body, UI text, stored data, or job completion. For asynchronous flows, identify the completion signal and a supported timeout. Map scenarios to the changed flow or diagram when present so reviewers can compare implementation with intent.
+- **Automated checks**: Include copyable repository-supported commands, where to run them, what behavior they cover, and how to recognize success. A test-suite command alone is insufficient when it does not explain the changed behavior being verified. Do not invent scripts, fixtures, endpoints, or outputs; mark missing information explicitly.
+- **Execution evidence**: Label each scenario/check `Passed`, `Failed`, or `Not run`, and record actual results separately from expected results. For checks not run, explain the reason and what access or environment is needed. Reviewer-only checks do not count as completed verification or override Step 6's required-check gate.
+- **Cleanup**: Include reset/cleanup steps when verification creates data or changes state. Describe side effects and use a disposable or non-production environment for mutating checks.
+
+Before finalizing, walk through the instructions from a fresh reviewer's perspective: can they prepare the environment, follow each step, and decide whether the flow meets the stated acceptance conditions? Fill all placeholders with repository evidence, and omit inapplicable fields with a brief reason when needed.
 
 ```markdown
 ## Summary
@@ -215,9 +230,35 @@ Match an existing repository PR template when present, including `.github/` temp
 
 ## Verification
 
-- **Automated**: <commands and results>
-- **Manual**: <steps and results>
-- **Not run**: <checks and reason>
+### Setup
+
+- **Revision / working directory**: <PR head revision and directory>
+- **Prerequisites**: <tools, services, configuration names, test data, account roles>
+- **Prepare and start**: <exact commands/actions and readiness signal, or setup link plus PR-specific steps>
+
+### Automated checks
+
+| Command (with working directory) | Behavior covered / expected success | Status | Observed result / reason not run |
+| --- | --- | --- | --- |
+| <copyable command> | <coverage and success signal> | <Passed / Failed / Not run> | <actual evidence or blocker> |
+
+### Behavioral scenarios
+
+Repeat this block for each relevant scenario:
+
+#### <Scenario name: main flow, regression, or relevant edge case>
+
+- **Acceptance condition**: <intended behavior; related issue requirement or flow node where available>
+- **Starting state**: <fixture, role, configuration, or other preconditions>
+
+| Step | Action / command / input | Expected observable result |
+| --- | --- | --- |
+| 1 | <concrete action> | <observable output or state> |
+| 2 | <next action> | <observable output or state> |
+
+- **Execution status**: <Passed / Failed / Not run>
+- **Observed result**: <actual evidence, or reason not run and required environment/access>
+- **Cleanup**: <reset commands/actions, or N/A with reason>
 
 ## Security check
 
@@ -407,6 +448,7 @@ Report:
 ## Quality rules
 
 - Be specific about the bug, feature, mechanism, risk, and verification.
+- Make reviewer verification reproducible: include setup, concrete steps, observable expected results, and honest execution status for the changed behavior, even when using a repository PR template.
 - Match repository branch, commit, and PR conventions before applying defaults.
 - Lead reviewers toward high-risk code and disclose AI authorship honestly.
 - Reject architecture fiction: diagrams and claims must trace back to the actual diff.
