@@ -1,6 +1,6 @@
 ---
 name: pr-prepare
-description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, reproducible reviewer verification steps, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or tea.
+description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, reproducible reviewer verification steps, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or gt.
 ---
 
 # Prepare and open a pull request
@@ -50,10 +50,10 @@ In Execute mode, resolve a writable push remote instead of assuming it is named 
 Detect the hosting provider from the selected remote URL and record the matching CLI context:
 
 - **GitHub**: Use `gh`. Verify authentication with `gh auth status`.
-- **Gitea**: Use `tea`. Inspect `tea --version` and `tea pulls create --help`, verify that a matching login exists with `tea logins list`, and confirm repository access with a read-only `tea pulls list` query. Run that probe in the same context the PR will be created with — `--remote <gitea-remote>`, or the explicit `--login <gitea-login> --repo <base-owner>/<base-repo>` — as resolved below. Without those flags `tea` falls back to whatever it infers from the local repository, so the probe can pass against a fork or a different server while PR creation still fails against the intended base.
+- **Gitea**: Use `gt` (Gitea CLI 1.0+, the successor to the archived `tea`). Inspect `gt --version` and `gt pr create --help`, verify that a usable account exists with `gt auth status`, and confirm repository access with a read-only `gt pr list --limit 1` query (or `gt doctor`, which checks instance, account, credential, and repository in one pass). Run that probe in the same context the PR will be created with — `--remote <gitea-remote>`, or the explicit `--host <gitea-url> --repo <base-owner>/<base-repo>` (plus `--user <gitea-user>` when the instance has several accounts) — as resolved below. Without those flags `gt` falls back to whatever it infers from `GITEA_CLI_REPO`, `gt repo set-default`, or the local remotes, so the probe can pass against a fork or a different server while PR creation still fails against the intended base.
 - If the hostname or provider is ambiguous, ask the user instead of choosing a CLI by guesswork.
 
-For Gitea, resolve `<gitea-remote>` to the base/upstream repository that should receive the PR, then prefer `--remote <gitea-remote>` so `tea` discovers its login and repository. This may differ from the writable push remote in a fork workflow. If the mapping is unavailable or ambiguous, use `--login <gitea-login>` and `--repo <base-owner>/<base-repo>` explicitly. Never print or persist access tokens in the PR body or command output.
+For Gitea, resolve `<gitea-remote>` to the base/upstream repository that should receive the PR, then prefer `--remote <gitea-remote>` so `gt` discovers its instance, account, and repository. This may differ from the writable push remote in a fork workflow. If the mapping is unavailable or ambiguous, use `--host <gitea-url>` and `--repo <base-owner>/<base-repo>` explicitly, adding `--user <gitea-user>` to pick a non-active account. Never print or persist access tokens in the PR body or command output.
 
 Stop before mutation when any of these conditions apply:
 
@@ -357,15 +357,18 @@ Pin every `gh` call in this step to the base repository with `--repo <base-owner
 
 Pass `--head` a bare branch name. `gh pr list --head` does not support `<owner>:<branch>`, and it returns an empty list rather than an error when given one — which reads as "no existing PR" and causes a duplicate. When the head branch lives in a fork, or the same branch name could exist across forks, filter the returned `headRepositoryOwner.login` for the expected head owner instead of encoding the owner in `--head`.
 
-For Gitea, query with `tea` and filter the JSON result for the exact head and base. Use the selected `--remote` context, or replace it with the resolved `--login` and optional `--repo` context:
+For Gitea, query with `gt` and confirm the exact head and base in the JSON result. Use the selected `--remote` context, or replace it with the resolved `--host`/`--repo` (and optional `--user`) context:
 
 ```bash
-tea pulls list \
+gt pr list \
   --remote <gitea-remote> \
+  --head <head-branch> \
+  --base <base-branch> \
   --state all \
-  --fields index,state,url,title,base,head \
-  --output json
+  --json number,state,url,title,base,head,head_repo
 ```
+
+For a fork head, pass `--head <head-owner>:<head-branch>` and still check `head_repo` in the result for the expected owner.
 
 Save the prepared body to a temporary file, then create the PR only after the push succeeds:
 
@@ -384,18 +387,22 @@ When the GitHub head branch is in a fork, use `--head <head-owner>:<head-branch>
 
 The two flags pin opposite ends and are both needed in a fork workflow: `--repo` fixes the repository the PR is opened against, `--head` fixes the repository the commits come from. `--repo` also keeps creation non-interactive — left to infer an ambiguous context, `gh` may prompt, which stalls an unattended run.
 
-For Gitea, pass the body through `--description` because `tea pulls create` has no body-file option:
+For Gitea:
 
 ```bash
-tea pulls create \
+gt pr create \
   --remote <gitea-remote> \
   --base <base-branch> \
   --head <head-branch> \
   --title "<title>" \
-  --description "$(cat <body-file>)"
+  --body-file <body-file> \
+  --no-input \
+  --json number,url,state
 ```
 
-When the Gitea head branch is in a fork, keep `--remote` pointed at the base/upstream repository and use `--head <head-owner>:<head-branch>`. When remote discovery is unsuitable, replace `--remote <gitea-remote>` with `--login <gitea-login> --repo <base-owner>/<base-repo>`.
+Passing explicit flags already skips `gt pr create`'s interactive questions; `--no-input` additionally guarantees no prompt or editor stalls an unattended run. Because the branch was pushed in the previous step, `gt` will not need to push it; do not add `--yes` to let `gt` push on its own, since that bypasses the push remote resolved in Step 1. If a PR already exists for the same branches, `gt pr create` links that PR instead of creating a duplicate, but still run the lookup above first so the workflow can report it explicitly.
+
+When the Gitea head branch is in a fork, keep `--remote` pointed at the base/upstream repository and use `--head <head-owner>:<head-branch>`. When remote discovery is unsuitable, replace `--remote <gitea-remote>` with `--host <gitea-url> --repo <base-owner>/<base-repo>` (plus `--user <gitea-user>` if needed).
 
 Do not force issue identifiers into the title when repository conventions place them only in branch names or the body.
 
@@ -411,13 +418,12 @@ gh pr view <pr-number> \
 
 A PR number is only unique within a repository, so `--repo` is what makes the number resolve against the intended one. Without it, a rerun from a fork clone can return a different repository's PR of the same number and report a false pass.
 
-For Gitea, pass the PR index returned by creation or found by the exact head/base query:
+For Gitea, pass the PR number returned by creation or found by the exact head/base query:
 
 ```bash
-tea pulls <pr-index> \
+gt pr view <pr-number> \
   --remote <gitea-remote> \
-  --fields index,state,url,title,body,base,head \
-  --output json
+  --json number,state,url,title,body,base,head,head_repo
 ```
 
 Confirm that the PR is open against the intended base, uses the pushed head branch, and contains the expected issue links and body. A PR creation failure leaves the remote branch intact for retry.
