@@ -74,15 +74,15 @@ Replace `pr-prepare` with another plugin name as needed. Refreshing the marketpl
 
 ## Available Skills
 
-| Skill                 | Description                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------ |
-| `commit-message`      | Generate a conventional commit message by analyzing staged git changes               |
-| `copilot-review`      | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat               |
-| `codex-review`        | Single-pass Codex (ChatGPT) review check-fix cycle, use with `/loop` to repeat       |
-| `prompt-audit`        | Audit a prompt against the 6 essential elements and produce an improved rewrite      |
-| `pr-prepare`          | Prepare a PR description with AI-authorship disclosure and pre-submit checklist      |
-| `plan-feature`        | Plan a feature before coding and produce a `plan.md` handoff document                |
-| `classify-change`     | Classify a change as leaf or core to decide AI involvement and review rigor          |
+| Skill             | Description                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `commit-message`  | Generate a conventional commit message by analyzing staged git changes             |
+| `copilot-review`  | Single-pass Copilot review check-fix cycle, use with `/loop` to repeat             |
+| `codex-review`    | Single-pass Codex (ChatGPT) review check-fix cycle, use with `/loop` to repeat     |
+| `prompt-audit`    | Audit a prompt against the 6 essential elements and produce an improved rewrite    |
+| `pr-prepare`      | Prepare a PR with AI-authorship disclosure, checklist, and UI/perf review evidence |
+| `plan-feature`    | Plan a feature before coding and produce a `plan.md` handoff document              |
+| `classify-change` | Classify a change as leaf or core to decide AI involvement and review rigor        |
 
 ## References
 
