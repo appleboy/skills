@@ -1,6 +1,6 @@
 ---
 name: pr-prepare
-description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, reproducible reviewer verification steps, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or gt.
+description: Prepare or open a GitHub or Gitea pull request with an explicit AI-authorship disclosure, change classification, reproducible reviewer verification steps, UI screenshots and performance evidence when relevant, and optional Mermaid diagram. Use whenever the user asks to prepare, write, open, create, push, ship, or get changes ready for a PR or review. Unless the user explicitly asks for a draft-only result, create or reuse a dedicated branch, verify the change, commit scoped files, push the branch, and then create the PR with gh or gt.
 ---
 
 # Prepare and open a pull request
@@ -12,6 +12,17 @@ branch -> verify -> commit -> push -> create PR -> verify PR
 ```
 
 Never skip forward after a failed step. Preserve unrelated user changes and never force-push.
+
+## Reference files
+
+Read each file at the step that needs it; they hold exact commands and templates, while this file holds the rules and stop conditions.
+
+| File                                                             | Read at                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------- |
+| [references/github.md](references/github.md)                     | Step 1, Step 11, Step 11b when the provider is GitHub |
+| [references/gitea.md](references/gitea.md)                       | Step 1, Step 11, Step 11b when the provider is Gitea  |
+| [references/pr-body-template.md](references/pr-body-template.md) | Step 8                                                |
+| [references/evidence.md](references/evidence.md)                 | Step 6b, only when evidence is needed                 |
 
 ## Select the operating mode
 
@@ -33,27 +44,19 @@ git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || ech
 git log --oneline -20
 ```
 
-A missing tracking remote or upstream is expected before the first push; treat both as informational, not as failures.
+A missing tracking remote or upstream is expected before the first push; treat both as informational.
 
-Remote URLs can carry credentials in their userinfo (for example `https://x-access-token:<token>@host/owner/repo.git`), so `git remote -v` is piped through `sed` to mask that segment before it reaches output or logs. Apply the same redaction to any other command that echoes a remote URL.
-
-The mask replaces the userinfo of any scheme-qualified URL, whether or not it holds a secret — `ssh://git@host/owner/repo.git` becomes `ssh://***@host/owner/repo.git`, hiding a username that was never sensitive. That is deliberate: erring toward masking costs only a well-known username, while a narrower pattern risks missing a real token. URLs with no userinfo and scp-style `git@host:owner/repo.git` (which has no `://`) pass through untouched. Scheme, host, and path always survive, so provider detection below still has what it needs.
+Remote URLs can carry credentials in their userinfo, so pipe every command that echoes a remote URL through the same `sed` mask. It deliberately masks any scheme-qualified userinfo, even a harmless `git@`, because a narrower pattern risks missing a real token; scheme, host, and path survive for provider detection.
 
 Determine the base branch from repository configuration or the remote default branch. If it is still unclear, ask the user; common values are `main` and `develop`.
 
 In Execute mode, resolve a writable push remote instead of assuming it is named `origin`:
 
 - Reuse the remote from an existing correct upstream.
-- Otherwise select the repository's configured writable fork or push remote and verify it with `git remote get-url --push <push-remote> | sed -E 's#://[^/@]*@#://***@#g'`, which masks any credentials embedded in the push URL.
+- Otherwise select the configured writable fork or push remote and verify it with `git remote get-url --push <push-remote> | sed -E 's#://[^/@]*@#://***@#g'`.
 - If no writable remote is clear, ask the user before pushing.
 
-Detect the hosting provider from the selected remote URL and record the matching CLI context:
-
-- **GitHub**: Use `gh`. Verify authentication with `gh auth status`.
-- **Gitea**: Use `gt` (Gitea CLI 1.0+, the successor to the archived `tea`). Inspect `gt --version` and `gt pr create --help`, verify that a usable account exists with `gt auth status`, and confirm repository access with a read-only `gt pr list --limit 1` query (or `gt doctor`, which checks instance, account, credential, and repository in one pass). Run that probe in the same context the PR will be created with — `--remote <gitea-remote>`, or the explicit `--host <gitea-url> --repo <base-owner>/<base-repo>` (plus `--user <gitea-user>` when the instance has several accounts) — as resolved below. Without those flags `gt` falls back to whatever it infers from `GITEA_CLI_REPO`, `gt repo set-default`, or the local remotes, so the probe can pass against a fork or a different server while PR creation still fails against the intended base.
-- If the hostname or provider is ambiguous, ask the user instead of choosing a CLI by guesswork.
-
-For Gitea, resolve `<gitea-remote>` to the base/upstream repository that should receive the PR, then prefer `--remote <gitea-remote>` so `gt` discovers its instance, account, and repository. This may differ from the writable push remote in a fork workflow. If the mapping is unavailable or ambiguous, use `--host <gitea-url>` and `--repo <base-owner>/<base-repo>` explicitly, adding `--user <gitea-user>` to pick a non-active account. Never print or persist access tokens in the PR body or command output.
+Detect the hosting provider from the selected remote URL — **GitHub** uses `gh`, **Gitea** uses `gt` — then verify the CLI and resolve its base-repository context as described in the matching provider file. If the hostname or provider is ambiguous, ask the user instead of guessing. Never print or persist access tokens in the PR body or command output.
 
 Stop before mutation when any of these conditions apply:
 
@@ -61,23 +64,13 @@ Stop before mutation when any of these conditions apply:
 - `HEAD` is detached.
 - The base branch cannot be determined, or Execute mode cannot determine a writable push remote.
 - The working tree mixes the requested change with unrelated edits that cannot be safely separated.
-
-In Execute mode, stop before mutation if the selected provider CLI is unavailable or unauthenticated.
+- In Execute mode, the provider CLI is unavailable, unauthenticated, or cannot reach the base repository.
 
 ### Step 2 - Resolve issue references and branch name
 
-Collect issue identifiers only from reliable context:
+Collect issue identifiers only from reliable context: the user's request, an explicit GitHub/Gitea issue URL or Jira browse URL, or a plan or task document that clearly identifies the work item. Recognize `#123`, `issue 123`, `/issues/123`, and Jira keys such as `GAIA-5375` or `/browse/GAIA-5375`.
 
-1. The user's request.
-2. An explicit GitHub or Gitea issue URL, or a Jira browse URL.
-3. A plan or task document that clearly identifies the work item.
-
-Recognize:
-
-- GitHub or Gitea issue numbers such as `#123`, `issue 123`, or `/issues/123`.
-- Jira issue keys such as `GAIA-5375` or `/browse/GAIA-5375`.
-
-Do not guess an issue from similar titles. Do not treat an ambiguous `#123` as an issue when it may be a PR number. If more than one repository-host issue or more than one Jira issue could be primary, ask the user which one to use.
+Do not guess an issue from similar titles, and do not treat an ambiguous `#123` as an issue when it may be a PR number. If more than one repository-host issue or more than one Jira issue could be primary, ask the user.
 
 Build the branch name as `<type>/<identifiers>-<slug>`:
 
@@ -88,20 +81,16 @@ fix/GAIA-5375-handle-expired-token
 feat/GAIA-5375-123-add-consent-flow
 ```
 
-Use the repository's established prefix convention when one exists; otherwise use a concise type such as `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, or `chore`. Preserve Jira keys in uppercase, strip `#` from GitHub or Gitea issue numbers, and keep the lowercase slug short. When both Jira and repository-host identifiers exist, put the Jira key first. Preserve identifiers before shortening an overly long slug.
-
-Validate the result with `git check-ref-format --branch <branch>`.
+Use the repository's prefix convention when one exists; otherwise use a concise type such as `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, or `chore`. Keep Jira keys uppercase and first, strip `#` from issue numbers, keep the lowercase slug short, and shorten the slug before dropping identifiers. Validate with `git check-ref-format --branch <branch>`.
 
 ### Step 3 - Create or confirm the head branch
 
-In Draft-only mode, skip this step.
+In Draft-only mode, skip this step. In Execute mode, ensure the work is on a dedicated head branch before staging or committing:
 
-In Execute mode, ensure the work is on a dedicated head branch before staging or committing:
-
-- If currently on the base branch, create the new branch with `git switch -c <branch>`; uncommitted changes move with it.
-- If already on the dedicated branch for this work, reuse it so rerunning the skill is idempotent.
-- If currently on another feature branch whose commits may not belong in this PR, ask whether the new branch should start from that `HEAD` or from the base branch. Do not silently include unrelated commits.
-- Check local and remote names before creation. If the desired name belongs to different work, append a numeric suffix such as `-2`; never overwrite or delete it.
+- On the base branch, create the branch with `git switch -c <branch>`; uncommitted changes move with it.
+- Already on the dedicated branch for this work, reuse it so reruns are idempotent.
+- On another feature branch whose commits may not belong in this PR, ask whether to start from that `HEAD` or from the base branch. Do not silently include unrelated commits.
+- If the desired name already belongs to different work locally or remotely, append a numeric suffix such as `-2`; never overwrite or delete it.
 
 Record the base branch, head branch, push remote, and existing upstream for the push and PR commands.
 
@@ -119,7 +108,7 @@ git diff --cached --stat
 git diff --cached
 ```
 
-For large diffs, read the stat and the important changed sections. Identify files, packages, services, public interfaces, and call relationships.
+For large diffs, read the stat and the important sections. Identify files, packages, services, public interfaces, and call relationships.
 
 Classify the whole PR using the stricter applicable category:
 
@@ -128,22 +117,34 @@ Classify the whole PR using the stricter applicable category:
 
 If the blast radius is unclear, ask: "If this code is buggy, how far would the failure spread?"
 
+### Step 4b - Decide review evidence
+
+Reviewers cannot see a UI change or judge a performance claim from text alone, so decide from the diff and the stated goal whether this PR needs visual or quantitative evidence. Apply every row that matches; a PR can need both:
+
+| Signal in diff / goal                                                                                                                                                                       | Evidence                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Changed `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.css`, `*.scss`, `*.html`, templates, UI components, user-visible copy, or layout                                                          | Web screenshots (before/after) |
+| Goal mentions performance, optimization, latency, throughput, or memory; or the diff touches hot paths, DB queries or indexes, caching, concurrency, bundle size, or algorithmic complexity | Performance report             |
+| Pure backend logic, docs, CI, or a dependency bump without a performance claim                                                                                                              | N/A with a one-line reason     |
+
+Ask the user only when the signals are ambiguous, such as a backend change that may alter what a page renders. Record an evidence plan for Step 6b: pages, states, viewports, data, and account role for screenshots; benchmark or workload, metrics, and dataset size for performance; or the one-line N/A reason.
+
 ### Step 5 - Record AI authorship
 
-Use the following default disclosure without asking the user for confirmation:
+Use this default disclosure without asking for confirmation:
 
 - **Tool / model**: the AI agent executing this workflow; use its reported model or tool name when available.
 - **AI-authored files**: every task-related file included in the PR.
 - **Human line-by-line reviewed**: `None — not yet reviewed by a human.`
 
-Do not treat the lack of human review as a reason to stop. Make the disclosure conspicuous in the PR body and final handoff so the PR is opened for human review with an accurate record. If the user supplies more specific authorship or review information, use that instead.
+Lack of human review is not a reason to stop; make the disclosure conspicuous in the PR body and final handoff. If the user supplies more specific authorship or review information, use that instead.
 
 ### Step 6 - Verify before commit
 
 Use repository instructions and existing scripts to run the relevant formatter, lint, tests, and build checks.
 
 - In Execute mode, run the normal required commands and inspect the diff again after any formatter or generator changes files.
-- In Draft-only mode, preserve the read-only guarantee: use only check or dry-run variants known not to modify tracked files. Do not run formatters, generators, fixers, or other potentially mutating commands; skip them and record `Not run` when no read-only variant exists or their behavior is uncertain.
+- In Draft-only mode, preserve the read-only guarantee: use only check or dry-run variants known not to modify tracked files. Skip formatters, generators, fixers, and other potentially mutating commands, and record `Not run` when no read-only variant exists or its behavior is uncertain.
 
 Ask only about checklist items that cannot be established from repository evidence:
 
@@ -161,6 +162,27 @@ In Execute mode, if a required check fails or cannot be verified, stop. Leave th
 
 Record the working directory, prerequisites, exact commands or actions, and observed results while verifying so Step 8 can turn them into reproducible reviewer instructions. Keep expected behavior separate from observed results; a proposed check is not evidence that it passed.
 
+### Step 6b - Capture review evidence
+
+Skip this step when Step 4b marked both evidence types N/A; otherwise read [references/evidence.md](references/evidence.md) for capture recipes.
+
+Choose the source in this order, because the user knows their environment best and repository tooling reflects how the team already measures:
+
+1. Files or numbers the user supplied.
+2. Repository scripts: `package.json` scripts, `Makefile` bench targets, existing e2e or Playwright configuration, documented benchmark commands.
+3. Generic tools already on `PATH` or in the repository's dependencies, such as Playwright or another headless browser, `go test -bench` with `benchstat`, `hyperfine`, Lighthouse CLI, or k6. A browser skill such as `/browse` may be used when installed, but do not assume one exists. Do not install global tools or fetch packages that are not already present without asking.
+
+Capture base and head under the same conditions so the comparison means something:
+
+- **Base vs head**: Check out the base branch in a separate `git worktree` outside the repository so the user's working tree is never touched. If base cannot be built or run, capture head only and say so rather than presenting a one-sided result as a comparison.
+- **Screenshots**: Fixed viewport — desktop 1280×800 by default, plus mobile 390×844 when the change is responsive — with the same data, account role, and state in both captures. Use only local or non-production environments and mask or avoid PII, tokens, and internal hostnames, because uploaded attachments are visible to everyone with repository access.
+- **Performance**: Record the environment (CPU, OS, runtime, dataset size), warm-up and run count, the statistic (median, p95), and the variance. When the variance overlaps the difference, report the result as inconclusive.
+- **Storage**: Write artifacts to `${TMPDIR:-/tmp}/pr-evidence/<head-branch>/`, never inside the repository, and never `git add` them. Name screenshots `<before|after>-<page>-<state>[-mobile].png`; the name without the extension is the evidence ID used in Step 8 and Step 11b.
+
+Draft-only mode may capture, since that does not modify tracked files, but never uploads.
+
+When evidence cannot be captured, record `Not run` with the reason and the environment or access needed. An evidence gap does not block commit, push, or PR creation, and it never overrides or relaxes Step 6's Execute-mode required-check gate; like reviewer-only checks, it is reported, not enforced.
+
 ### Step 7 - Map the change
 
 For a non-trivial change, add a Mermaid diagram derived from the actual diff:
@@ -172,120 +194,32 @@ For a non-trivial change, add a Mermaid diagram derived from the actual diff:
 | Modules, packages, or services       | `flowchart LR` with `subgraph` |
 | Status or lifecycle transitions      | `stateDiagram-v2`              |
 
-Keep the diagram honest and renderable:
-
-- Map every changed node to a touched file, function, package, or service.
-- Distinguish new or modified nodes with per-node `style` lines.
-- Stay below roughly 15-20 nodes and prefer `TD` when `LR` would be too wide.
-- Do not use `click` handlers or theme initialization directives.
-- Omit the diagram for a one-line fix, copy change, or dependency bump.
+Map every changed node to a touched file, function, package, or service; mark new or modified nodes with per-node `style` lines; stay below roughly 15-20 nodes and prefer `TD` when `LR` would be too wide; do not use `click` handlers or theme initialization directives. Omit the diagram for a one-line fix, copy change, or dependency bump.
 
 ### Step 8 - Prepare the PR body
 
-Match an existing repository PR template when present, including `.github/` templates for GitHub and `.gitea/` templates for Gitea. Put the verification details below in its equivalent testing section, or add a section if none exists. Otherwise fill this template without inventing evidence:
+Match an existing repository PR template when present, including `.github/` templates for GitHub and `.gitea/` templates for Gitea; put the verification and evidence content in its equivalent sections, or add sections it lacks. Otherwise fill [references/pr-body-template.md](references/pr-body-template.md). Never invent evidence.
 
 #### Write reproducible reviewer verification
 
-The PR body must let a reviewer verify the intended behavior without needing the author's local state or this conversation. Scale detail to the change, but do not reduce verification to "tests pass" or "test manually."
+The PR body must let a reviewer verify the intended behavior without the author's local state or this conversation. Scale detail to the change, but never reduce verification to "tests pass" or "test manually."
 
-- **Prerequisites and setup**: Identify the head branch to check out, or the exact PR head SHA when the intended changes are already committed, along with the working directory, relevant runtime/tool versions, dependencies, services, configuration, test data, and account roles. Before commit, use the resolved head branch; never substitute the base SHA or invent a revision. In Draft-only mode with uncommitted changes, state that the changes are local and not yet available from the branch. Give the actual setup/start commands and readiness signal where needed. Use safe sample data and environment-variable names, never credentials. Link maintained setup documentation for lengthy standard setup, but keep PR-specific instructions in the body.
-- **Behavioral scenarios**: Derive acceptance conditions from the requested goal or issue and confirm them against the diff. Include the main changed flow and relevant failure, boundary, permission, or regression cases; omit unrelated cases. For a bug fix, describe the original trigger and corrected outcome. For a refactor, state which behavior should remain unchanged. For documentation or skill changes, provide a concrete inspection or representative usage scenario instead of inventing application commands.
-- **Steps and expected results**: For each scenario, state the starting state and provide numbered actions with concrete inputs, commands, requests, or UI navigation. Pair each meaningful step with observable expected output or state, such as HTTP status/body, UI text, stored data, or job completion. For asynchronous flows, identify the completion signal and a supported timeout. Map scenarios to the changed flow or diagram when present so reviewers can compare implementation with intent.
-- **Automated checks**: Include copyable repository-supported commands, where to run them, what behavior they cover, and how to recognize success. A test-suite command alone is insufficient when it does not explain the changed behavior being verified. Do not invent scripts, fixtures, endpoints, or outputs; mark missing information explicitly.
-- **Execution evidence**: Label each automated check and behavioral scenario in the Verification section `Passed`, `Failed`, or `Not run`, and record actual results separately from expected results. For checks not run, explain the reason and what access or environment is needed. Reviewer-only checks do not count as completed verification or override Step 6's Execute-mode required-check gate.
-- **Cleanup**: Include reset/cleanup steps when verification creates data or changes state. Describe side effects and use a disposable or non-production environment for mutating checks.
+- **Prerequisites and setup**: Identify the head branch, or the exact PR head SHA when the changes are already committed, along with the working directory, runtime/tool versions, dependencies, services, configuration, test data, and account roles. Never substitute the base SHA or invent a revision. In Draft-only mode with uncommitted changes, state that the changes are local. Give actual setup/start commands and readiness signals; use safe sample data and environment-variable names, never credentials. Link maintained setup docs for lengthy standard setup but keep PR-specific steps in the body.
+- **Behavioral scenarios**: Derive acceptance conditions from the goal or issue and confirm them against the diff. Include the main changed flow and relevant failure, boundary, permission, or regression cases. For a bug fix, describe the original trigger and corrected outcome; for a refactor, the behavior that stays unchanged; for documentation or skill changes, a concrete inspection or representative usage scenario.
+- **Steps and expected results**: For each scenario, give the starting state and numbered actions with concrete inputs, commands, requests, or UI navigation, each paired with an observable expected result. For asynchronous flows, identify the completion signal and a supported timeout. Map scenarios to the diagram when present.
+- **Automated checks**: Include copyable repository-supported commands, where to run them, what behavior they cover, and how to recognize success. Do not invent scripts, fixtures, endpoints, or outputs; mark missing information explicitly.
+- **Execution evidence**: Label each check and scenario `Passed`, `Failed`, or `Not run`, and record actual results separately from expected ones. For checks not run, give the reason and the access or environment needed. Reviewer-only checks do not count as completed verification or override Step 6's Execute-mode gate.
+- **Cleanup**: Include reset steps when verification creates data or changes state, describe side effects, and use a disposable or non-production environment for mutating checks.
 
-Before finalizing, walk through the instructions from a fresh reviewer's perspective: can they prepare the environment, follow each step, and decide whether the flow meets the stated acceptance conditions? Fill all placeholders with repository evidence, and omit inapplicable fields with a brief reason when needed.
+#### Write the Evidence section
 
-```markdown
-## Summary
+Fill `## Evidence` from Step 4b and Step 6b with the same `Passed / Failed / Not run` vocabulary. For an evidence type marked N/A, write a single `N/A — <reason>` line instead of a table. Put each image cell as an `<!-- evidence:<id> -->` placeholder so Step 11b can replace it reliably. Never describe a screenshot that was not captured or fill a metric that was not measured. Flag every evidence item marked `Not run` in the Reviewer guide so reviewers know what to check themselves.
 
-<What changed, why, and the mechanism used>
-
-## Related issues
-
-- Jira: <[GAIA-5375](Jira URL), plain key, or N/A>
-- GitHub/Gitea: <Closes #123, Related to #123, full cross-repository URL, or N/A>
-
-## Architecture / flow
-
-<Mermaid diagram; omit this section for trivial changes>
-
-## AI authorship
-
-- [ ] No AI was used
-- [ ] AI was used
-  - **Tool / model**: <value>
-  - **AI-authored files**: <list>
-  - **Human line-by-line reviewed**: None — not yet reviewed by a human.
-
-## Change classification
-
-- [ ] Leaf change
-- [ ] Core change
-
-## Plan reference
-
-<Link or concise goal and scope>
-
-## Verification
-
-### Setup
-
-- **Checkout target / working directory**: <head branch, or exact PR head SHA when already committed, and directory; disclose local-only changes in Draft-only mode>
-- **Prerequisites**: <tools, services, configuration names, test data, account roles>
-- **Prepare and start**: <exact commands/actions and readiness signal, or setup link plus PR-specific steps>
-
-### Automated checks
-
-| Command (with working directory) | Behavior covered / expected success | Status | Observed result / reason not run |
-| --- | --- | --- | --- |
-| <copyable command> | <coverage and success signal> | <Passed / Failed / Not run> | <actual evidence or blocker> |
-
-### Behavioral scenarios
-
-Repeat this block for each relevant scenario:
-
-#### <Scenario name: main flow, regression, or relevant edge case>
-
-- **Acceptance condition**: <intended behavior; related issue requirement or flow node where available>
-- **Starting state**: <fixture, role, configuration, or other preconditions>
-
-| Step | Action / command / input | Expected observable result |
-| --- | --- | --- |
-| 1 | <concrete action> | <observable output or state> |
-| 2 | <next action> | <observable output or state> |
-
-- **Execution status**: <Passed / Failed / Not run>
-- **Observed result**: <actual evidence, or reason not run and required environment/access>
-- **Cleanup**: <reset commands/actions, or N/A with reason>
-
-## Security check
-
-- [ ] No secrets in the diff
-- [ ] External inputs are validated
-- [ ] Permission checks are tested
-- [ ] Errors do not leak internals
-- [ ] N/A - no external or security-sensitive interface changed
-
-## Risk and rollback
-
-- **Risk**: <what could break>
-- **Rollback**: <how to revert safely>
-
-## Reviewer guide
-
-- **Read carefully**: <high-risk files or functions>
-- **Spot-check**: <lower-risk generated or mechanical changes>
-```
-
-Use `Closes #123` only when the selected GitHub or Gitea repository supports the closing keyword and the PR should close that issue in the same repository. Otherwise use `Related to #123` or a full URL. Jira keys do not use repository-host closing syntax; link them when the Jira base URL is known and use the plain key otherwise.
+Before finalizing, walk through the body as a fresh reviewer: can they prepare the environment, follow each step, and decide whether the flow meets the acceptance conditions? Fill every placeholder from repository evidence, and omit inapplicable fields with a brief reason.
 
 ### Step 9 - Stage and commit
 
-In Draft-only mode, skip this step.
-
-First determine whether the intended change is already committed:
+In Draft-only mode, skip this step. First determine whether the intended change is already committed:
 
 ```bash
 git log <base>..HEAD --oneline
@@ -306,9 +240,9 @@ git diff --staged
 git diff --staged --check
 ```
 
-Stop if a non-empty staged diff contains unrelated changes, violates the announced scope, or fails verification. An empty staged diff is valid only when `<base>..HEAD` already contains the complete intended commits; otherwise stop.
+Stop if a non-empty staged diff contains unrelated changes, violates the announced scope, or fails verification. Evidence artifacts from Step 6b must never be staged; if any appear, stop and unstage them. An empty staged diff is valid only when `<base>..HEAD` already contains the complete intended commits; otherwise stop.
 
-Match recent repository commit style. Prefer a focused conventional commit when no stronger convention exists:
+Match recent repository commit style; otherwise prefer a focused conventional commit:
 
 ```text
 <type>(<scope>): <imperative summary>
@@ -316,117 +250,32 @@ Match recent repository commit style. Prefer a focused conventional commit when 
 <important change bullets, if useful>
 ```
 
-When staging was needed, create the commit directly because Execute mode already expresses the user's intent to commit and open the PR. Whether the commit was created now or already existed, verify the intended commit range and `git show --stat --oneline HEAD`, then report any intentionally unstaged user changes.
+Create the commit directly, since Execute mode already expresses the intent to commit. Then verify the intended commit range and `git show --stat --oneline HEAD`, and report any intentionally unstaged user changes.
 
 ### Step 10 - Push the branch
 
-Push only after the intended commit was created successfully or verified as already present.
+Push only after the intended commit was created or verified as already present.
 
-- If the branch already has the correct upstream, preserve it and use `git push`.
-- If the branch has no upstream, use the writable push remote resolved in Step 1.
+- If the branch already has the correct upstream, preserve it and run `git push`.
+- If it has no upstream, run `git push -u <push-remote> <head-branch>` with the remote resolved in Step 1.
 - If the existing upstream is wrong or ambiguous, stop and ask before replacing it.
-- On reruns, if the correct upstream already contains `HEAD`, skip the redundant push and continue to PR creation.
+- On reruns, if the correct upstream already contains `HEAD`, skip the push.
 
-```bash
-git push
-git push -u <push-remote> <head-branch>
-```
-
-Use only the command that matches the branch state; do not run both.
-
-Never force-push. If authentication, policy, hooks, or network errors prevent the push, stop and report the exact failure. Keep the local branch and commit for retry; do not create the PR.
+Never force-push. If authentication, policy, hooks, or network errors prevent the push, stop and report the exact failure; keep the local branch and commit and do not create the PR.
 
 ### Step 11 - Create and verify the PR
 
-Check whether the exact head and base branch pair already has a PR before creating one. If it does, return the existing PR instead of creating a duplicate; edit it only when the user asks.
+Use the commands in the provider file, always pinned to the base repository context resolved in Step 1, so a fork clone cannot redirect the lookup, creation, or verification to the wrong repository.
 
-Both lookups below request only the fields needed to identify a match. They deliberately omit `body`: it has no bearing on whether a PR exists for the pair, and pulling every candidate's full description into the transcript is wasted output. Fetch the body later, from the verification step, once a specific PR is known.
+1. **Look up** an existing PR for the exact head and base pair. If one exists, return it instead of creating a duplicate; edit it only when the user asks (Step 11b's placeholder replacement is the one exception).
+2. **Create** the PR from a body file only after the push succeeded. Do not force issue identifiers into the title when repository conventions place them only in branch names or the body.
+3. **Verify** with the same provider and context: the PR is open against the intended base, uses the pushed head branch, and contains the expected issue links and body.
 
-For GitHub, query existing PRs with `gh`:
+A PR creation failure leaves the remote branch intact for retry.
 
-```bash
-gh pr list \
-  --repo <base-owner>/<base-repo> \
-  --head <head-branch> \
-  --base <base-branch> \
-  --state all \
-  --json number,state,url,title,baseRefName,headRefName,headRepositoryOwner
-```
+### Step 11b - Attach evidence
 
-Pin every `gh` call in this step to the base repository with `--repo <base-owner>/<base-repo>`. Without it `gh` infers the repository from the local checkout's remotes, which in a fork clone resolves to the fork rather than the repository that should receive the PR — so the lookup can miss an existing upstream PR and the workflow creates a duplicate. This mirrors the `--remote`/`--repo` context the Gitea commands below already pin.
-
-Pass `--head` a bare branch name. `gh pr list --head` does not support `<owner>:<branch>`, and it returns an empty list rather than an error when given one — which reads as "no existing PR" and causes a duplicate. When the head branch lives in a fork, or the same branch name could exist across forks, filter the returned `headRepositoryOwner.login` for the expected head owner instead of encoding the owner in `--head`.
-
-For Gitea, query with `gt` and confirm the exact head and base in the JSON result. Use the selected `--remote` context, or replace it with the resolved `--host`/`--repo` (and optional `--user`) context:
-
-```bash
-gt pr list \
-  --remote <gitea-remote> \
-  --head <head-branch> \
-  --base <base-branch> \
-  --state all \
-  --json number,state,url,title,base,head,head_repo
-```
-
-For a fork head, pass `--head <head-owner>:<head-branch>` and still check `head_repo` in the result for the expected owner.
-
-Save the prepared body to a temporary file, then create the PR only after the push succeeds:
-
-For GitHub:
-
-```bash
-gh pr create \
-  --repo <base-owner>/<base-repo> \
-  --base <base-branch> \
-  --head <head-branch> \
-  --title "<title>" \
-  --body-file <body-file>
-```
-
-When the GitHub head branch is in a fork, use `--head <head-owner>:<head-branch>`; `gh pr create --head` accepts that form to select a head repo owned by another user. It does not accept an organization as the owner, so for an org-owned fork run `gh` against that repository context instead. Unlike `gh pr list`, an explicit owner here is required for fork-based creation, not optional.
-
-The two flags pin opposite ends and are both needed in a fork workflow: `--repo` fixes the repository the PR is opened against, `--head` fixes the repository the commits come from. `--repo` also keeps creation non-interactive — left to infer an ambiguous context, `gh` may prompt, which stalls an unattended run.
-
-For Gitea:
-
-```bash
-gt pr create \
-  --remote <gitea-remote> \
-  --base <base-branch> \
-  --head <head-branch> \
-  --title "<title>" \
-  --body-file <body-file> \
-  --no-input \
-  --json number,url,state
-```
-
-Passing explicit flags already skips `gt pr create`'s interactive questions; `--no-input` additionally guarantees no prompt or editor stalls an unattended run. Because the branch was pushed in the previous step, `gt` will not need to push it; do not add `--yes` to let `gt` push on its own, since that bypasses the push remote resolved in Step 1. If a PR already exists for the same branches, `gt pr create` links that PR instead of creating a duplicate, but still run the lookup above first so the workflow can report it explicitly.
-
-When the Gitea head branch is in a fork, keep `--remote` pointed at the base/upstream repository and use `--head <head-owner>:<head-branch>`. When remote discovery is unsuitable, replace `--remote <gitea-remote>` with `--host <gitea-url> --repo <base-owner>/<base-repo>` (plus `--user <gitea-user>` if needed).
-
-Do not force issue identifiers into the title when repository conventions place them only in branch names or the body.
-
-Verify the result with the same provider and context used to create it.
-
-For GitHub, pass the PR number returned by creation or found by the exact head/base query:
-
-```bash
-gh pr view <pr-number> \
-  --repo <base-owner>/<base-repo> \
-  --json number,title,url,state,baseRefName,headRefName,body
-```
-
-A PR number is only unique within a repository, so `--repo` is what makes the number resolve against the intended one. Without it, a rerun from a fork clone can return a different repository's PR of the same number and report a false pass.
-
-For Gitea, pass the PR number returned by creation or found by the exact head/base query:
-
-```bash
-gt pr view <pr-number> \
-  --remote <gitea-remote> \
-  --json number,state,url,title,body,base,head,head_repo
-```
-
-Confirm that the PR is open against the intended base, uses the pushed head branch, and contains the expected issue links and body. A PR creation failure leaves the remote branch intact for retry.
+Skip this step in Draft-only mode or when Step 6b captured no screenshots. Run it only after Step 11 verified the PR, following the provider file: Gitea uploads attachments and replaces placeholders with image links; GitHub has no upload API, so keep the placeholders, append a pending-attachment note, and never claim an automatic upload or commit images. The only body change allowed here is replacing `<!-- evidence:<id> -->` placeholders and adding that note.
 
 ## Failure and rerun behavior
 
@@ -434,7 +283,9 @@ Confirm that the PR is open against the intended base, uses the pushed head bran
 - A commit failure stops before push.
 - A push failure stops before PR creation.
 - A PR creation failure does not delete or rewrite the pushed branch.
-- A rerun reuses the correct branch, commit, upstream, or existing PR when already present instead of duplicating work.
+- An evidence capture failure is recorded as `Not run` and does not block commit, push, or PR creation.
+- An attachment upload or body edit failure leaves the PR and its placeholders intact and is reported; it never deletes or recreates the PR.
+- A rerun reuses the correct branch, commit, upstream, existing PR, or existing attachment instead of duplicating work.
 - Never use destructive cleanup such as `git reset --hard`, branch deletion, or force-push as automatic recovery.
 
 ## Final handoff
@@ -449,13 +300,15 @@ Report:
 - Push remote and upstream status, if pushed.
 - PR number and URL, if created or already present.
 - Verification commands and results.
+- Evidence: screenshots captured / uploaded / pending manual attach (with absolute local paths for GitHub), performance report status, and every evidence item marked `Not run` with its reason.
 - Remaining unstaged changes, failed checks, TODOs, and reviewer recommendation: one reviewer for leaf changes, two or more including the module owner for core changes.
 
 ## Quality rules
 
 - Be specific about the bug, feature, mechanism, risk, and verification.
-- Make reviewer verification reproducible: include setup, concrete steps, observable expected results, and honest execution status for the changed behavior, even when using a repository PR template.
+- Make reviewer verification reproducible: setup, concrete steps, observable expected results, and honest execution status, even when using a repository PR template.
 - Match repository branch, commit, and PR conventions before applying defaults.
 - Lead reviewers toward high-risk code and disclose AI authorship honestly.
 - Reject architecture fiction: diagrams and claims must trace back to the actual diff.
+- Never fabricate or estimate performance numbers or describe screenshots that were not captured; evidence must come from an actual run or a user-supplied file.
 - Flag unreviewed AI-authored core code, missing tests, leaked secrets, scope creep, and sprawling cross-module changes before any push.
