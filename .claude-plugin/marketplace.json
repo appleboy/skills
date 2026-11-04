@@ -58,7 +58,7 @@
     },
     {
       "name": "plan-feature",
-      "description": "Plan a feature before writing any code by clarifying goals, exploring the codebase, and producing a plan.md handoff document",
+      "description": "Plan a feature before writing any code by clarifying goals, exploring the codebase, and producing a plan.md handoff document with issue links, leaf/core classification, reproducible verification, and an evidence plan that pr-prepare reuses",
       "author": {
         "name": "appleboy"
       },

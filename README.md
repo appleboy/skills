@@ -81,7 +81,7 @@ Replace `pr-prepare` with another plugin name as needed. Refreshing the marketpl
 | `codex-review`    | Single-pass Codex (ChatGPT) review check-fix cycle, use with `/loop` to repeat     |
 | `prompt-audit`    | Audit a prompt against the 6 essential elements and produce an improved rewrite    |
 | `pr-prepare`      | Prepare a PR with AI-authorship disclosure, checklist, and UI/perf review evidence |
-| `plan-feature`    | Plan a feature before coding and produce a `plan.md` handoff document              |
+| `plan-feature`    | Plan a feature before coding and produce a `plan.md` that feeds `pr-prepare`       |
 | `classify-change` | Classify a change as leaf or core to decide AI involvement and review rigor        |
 
 ## References
